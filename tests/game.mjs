@@ -10,8 +10,9 @@ const formed = (kind = 'bee', row = 3, col = 4) => { const e = new Enemy({ kind,
 /** 스테이지가 끝나지 않게 붙들어 두는 적 (영영 입장하지 않는다) */
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 /** 지금 막 play 가 된 게임 */
-function playing(enemies, { rng = seq(0.5) } = {}) {
+function playing(enemies, { rng = seq(0.5), difficulty } = {}) {
   const g = new Game({ rng });
+  if (difficulty) g.setDifficulty(difficulty);
   g.start();
   g.enemies = [...enemies, anchor()];
   g.phase = 'play';
@@ -137,13 +138,47 @@ check('구출된 잠수함이 옆에 붙어 쌍둥이', gr.player.twin && gr.res
 gr.player.setMove(1); run(gr, 400);
 check('쌍둥이도 화면 안에 머문다', gr.player.rect().x1 <= 224);
 
-const hb = formed('boss', 0, 4); hb.hp = 1; hb.carrying = true;
-const gh = playing([hb]);
-gh.hitEnemy(hb);
-check('대열에서 잡으면 구출되지 않고 적 잠수함이 덤빈다', gh.rescue === null && gh.enemies.some((e) => e.kind === 'ship' && e.diving));
+// 대열에서 납치한 문어를 잡으면: 쉬움은 구출 · 보통(원작)은 잃는다 · 어려움은 적 잠수함
+const catchInFormation = (difficulty) => {
+  const b = formed('boss', 0, 4); b.hp = 1; b.carrying = true;
+  const g = playing([b], { difficulty });
+  g.hitEnemy(b);
+  return g;
+};
+const ge = catchInFormation('easy');
+check('쉬움: 대열에서 잡아도 잠수함이 풀려난다', ge.rescue !== null && !ge.enemies.some((e) => e.kind === 'ship'));
+for (let i = 0; i < 300 && ge.rescue; i++) ge.tick();
+check('쉬움: 구한 잠수함이 쌍둥이가 된다', ge.player.twin && ge.rescue === null);
+
+const gn = catchInFormation('normal');
+check('보통: 대열에서 잡으면 잠수함을 잃을 뿐 적이 되지는 않는다', gn.rescue === null && !gn.enemies.some((e) => e.kind === 'ship') && !gn.player.twin);
+
+const gh = catchInFormation('hard');
+check('어려움: 대열에서 잡으면 구하지 못하고 적 잠수함이 덤빈다', gh.rescue === null && gh.enemies.some((e) => e.kind === 'ship' && e.diving));
 const gs = gh.enemies.find((e) => e.kind === 'ship');
+const scoreBefore = gh.score;
 gs.hp = 1; gh.hitEnemy(gs);
-check('적 잠수함을 잡으면 100점', gh.score === 400 + 100 || gh.score === 150 + 100);
+check('적 잠수함을 잡으면 100점', gh.score - scoreBefore === 100);
+
+const hd = formed('boss', 0, 4); hd.hp = 1; hd.carrying = true; hd.state = 'dive'; hd.x = 112; hd.y = 120;
+const gdh = playing([hd], { difficulty: 'hard' });
+gdh.hitEnemy(hd);
+check('어려움에서도 급강하 중에 잡으면 구출', gdh.rescue !== null);
+
+// 납치된 잠수함을 직접 쏘면: 쉬움은 탄만 사라지고, 나머지는 잃는다
+const shootCaptive = (difficulty) => {
+  const b = formed('boss', 0, 4); b.carrying = true;
+  const g = playing([b], { difficulty });
+  g.player.shots.push({ x: b.x, y: b.y - 12 });
+  g.shotsVsEnemies();
+  return { g, b };
+};
+const se = shootCaptive('easy');
+check('쉬움: 납치된 잠수함을 직접 쏴도 잃지 않는다', se.b.carrying && se.g.player.shots.length === 0);
+for (const d of ['normal', 'hard']) {
+  const sc = shootCaptive(d);
+  check(`${d}: 납치된 잠수함을 직접 쏘면 잃는다`, !sc.b.carrying);
+}
 
 // 출격
 const gl = new Game();

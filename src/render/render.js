@@ -687,13 +687,17 @@ function drawOverlay(ctx, game) {
     else shadowText(ctx, t('title.unlock'), cx, 226, 7, '#9fd8ff');
     shadowText(ctx, t('title.controls'), cx, 238, 8, '#9fd8ff');
     shadowText(ctx, t('title.touch'), cx, 252, 8, '#9fd8ff');
+    shadowText(ctx, t(`hint.captive.${game.cfg.captive}`), cx, 268, 7, COLOR.accent);
   } else if (phase === 'ready') {
     if (game.readyKind === 'ready') shadowText(ctx, t('msg.ready'), cx, 150, 16, COLOR.accent);
     else if (game.boss) {
       if ((game.frame >> 3) % 2 === 0) shadowText(ctx, t('msg.warning'), cx, 128, 18, '#ff5a5a');
       shadowText(ctx, t('msg.boss'), cx, 152, 14, COLOR.accent);
       shadowText(ctx, t(game.boss.nameKey), cx, 172, 11, COLOR.text);
-    } else shadowText(ctx, game.bonus ? t('msg.bonus') : t('msg.stage', { n: game.stage }), cx, 150, 16, COLOR.accent);
+    } else {
+      shadowText(ctx, game.bonus ? t('msg.bonus') : t('msg.stage', { n: game.stage }), cx, 150, 16, COLOR.accent);
+      if (game.stage === 1) shadowText(ctx, t(`hint.captive.${game.cfg.captive}`), cx, 172, 7, COLOR.text);   // 첫 스테이지에서 난이도별 납치 규칙을 알려 준다
+    }
   } else if (phase === 'clear') {
     shadowText(ctx, game.boss ? t('msg.bossdown', { name: t(game.boss.nameKey) }) : t('msg.clear'), cx, 150, 16, COLOR.accent);
   } else if (phase === 'captured') {

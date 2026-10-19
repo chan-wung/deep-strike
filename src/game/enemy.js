@@ -6,11 +6,11 @@ export const KINDS = {
   butterfly: { score: 80, dive: 160, hp: 1, gauge: 4 },    // 복어
   boss: { score: 150, dive: 400, hp: 2, gauge: 8 },        // 문어
   fish: { score: 100, dive: 100, hp: 1, gauge: 0 },        // 보너스 물고기
-  ship: { score: 100, dive: 100, hp: 1, gauge: 3 },         // 구하지 못하고 적이 된 잠수함
   eel: { score: 100, dive: 200, hp: 1, gauge: 4 },          // 전기뱀장어: 화면을 가로로 가로지른다
   ray: { score: 120, dive: 240, hp: 1, gauge: 5 },          // 가오리: 지그재그로 내려오며 3갈래 탄
   turtle: { score: 200, dive: 400, hp: 3, gauge: 6 },       // 거북: 체력 3, 느리지만 단단하다
   mine: { score: 100, dive: 200, hp: 1, gauge: 4 },         // 폭탄 복어: 잡으면 사방으로 탄이 터진다
+  ship: { score: 100, dive: 100, hp: 1, gauge: 3 },         // 구하지 못하고 적이 된 잠수함 (어려움)
 };
 export const SPD = { enter: 2.4, toSlot: 2.6, exit: 2.6, bonus: 2.7 };
 export const BEAM_TICKS = 170;
@@ -27,7 +27,7 @@ let nextId = 1;
  * state: wait(입장 대기) → enter(입장 경로) → toSlot(자리로) → formation(대열)
  *        formation → dive → (화면 밖) → 위에서 다시 toSlot
  *        문어: formation → beamMove → beam(소용돌이) → exit → toSlot,  납치 중이면 hold
- * 대열이 없는 적(slotless: 보너스 물고기·적이 된 잠수함)은 화면 밖으로 나가면 gone.
+ * 대열이 없는 적(slotless: 보너스 물고기·보스가 풀어 놓은 졸개·적이 된 잠수함)은 화면 밖으로 나가면 gone.
  */
 export class Enemy {
   constructor({ kind, row = 0, col = 0, wave = 0, delay = 0, entry = 0, slotless = false, bonus = false }) {

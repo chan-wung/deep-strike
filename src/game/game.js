@@ -6,7 +6,7 @@ import { createBoss } from './bosses.js';
 import { Player, PLAYER_Y, TWIN_GAP, RAPID_TICKS } from './player.js';
 import { buildStage, isBonus, isBoss, BONUS_FISH } from './stage.js';
 import { WEAPONS, pickItem, pickWeapon } from './weapons.js';
-import { addRecord, cleanName, emptyBoards, qualifies } from '../app/records.js';
+import { addRecord, cleanName, emptyBoards, qualifies, MODES } from '../app/records.js';
 
 export const TICRATE = 60;
 const START_LIVES = 3;
@@ -30,16 +30,17 @@ const MAX_MINIONS = 6;
 
 /**
  * 난이도: lives 시작 잠수함 수 · bullet 적 탄 속도 배율 · interval 급강하 간격 배율 · divers 동시 급강하 수 가감 · drop 아이템 확률 · bossHp 보스 체력 배율
+ * captive 는 납치한 문어를 잡았을 때의 규칙: free 언제 잡아도 구출 · lost 급강하 중에만 구출(대열에서 잡으면 잃는다, 원작 방식) · hostile 대열에서 잡으면 적 잠수함이 되어 덤빈다
  * endless 는 15 스테이지에서 끝나지 않고 계속되는 무한 모드 (어려움과 같은 설정). 세 난이도를 모두 깬 뒤에만 고를 수 있다
  */
-const HARD = { lives: START_LIVES, bullet: 1.2, interval: 0.75, divers: 1, drop: 0.08, bossHp: 1.3 };
+const HARD = { lives: START_LIVES, bullet: 1.2, interval: 0.75, divers: 1, drop: 0.08, bossHp: 1.3, captive: 'hostile' };
 export const DIFFICULTIES = {
-  easy: { lives: 4, bullet: 0.85, interval: 1.3, divers: -1, drop: 0.18, bossHp: 0.8 },
-  normal: { lives: START_LIVES, bullet: 1, interval: 1, divers: 0, drop: 0.12, bossHp: 1 },
+  easy: { lives: 4, bullet: 0.85, interval: 1.3, divers: -1, drop: 0.18, bossHp: 0.8, captive: 'free' },
+  normal: { lives: START_LIVES, bullet: 1, interval: 1, divers: 0, drop: 0.12, bossHp: 1, captive: 'lost' },
   hard: HARD,
   endless: { ...HARD, endless: true },
 };
-export const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'endless'];
+export const DIFFICULTY_ORDER = MODES;
 /** 이 셋을 모두 깨면 무한 모드가 열린다 */
 export const CLEAR_TO_UNLOCK = ['easy', 'normal', 'hard'];
 
@@ -482,7 +483,7 @@ export class Game {
       const b = this.boss;
       if (b && b.targetable && overlap(sb, b.rect())) { s.dead = true; this.hitBoss(); continue; }
       const c = this.enemies.find((en) => en.carrying && overlap(sb, boxAt(en.x, en.y - 12, 6, 6)));
-      if (c) { s.dead = true; c.carrying = false; this.boom(c.x, c.y - 12); }   // 납치된 잠수함을 직접 쏘면 잃는다
+      if (c) { s.dead = true; if (this.cfg.captive !== 'free') this.loseCaptive(c); }   // 납치된 잠수함을 직접 쏘면 잃는다 (쉬움은 탄만 사라진다)
     }
     player.shots = player.shots.filter((s) => !s.dead);
   }
@@ -533,15 +534,26 @@ export class Game {
       const env = this.makeEnv();
       for (let i = 0; i < 8; i++) env.shoot(e.x, e.y, i * TAU / 8 + 0.2, 1.3);
     }
-    if (e.carrying) {
-      e.carrying = false;
-      if (diving) this.rescue = { x: e.x, y: e.y - 12, a: 0 };
-      else this.spawnHostileShip(e);
-    }
+    if (e.carrying) this.freeCaptive(e, diving);
     e.state = 'gone';
   }
 
-  /** 대열에 있는 문어를 잡으면 납치된 잠수함은 구해지지 않고 적이 되어 덤벼든다 */
+  /** 납치한 문어가 잡혔다: 난이도 규칙(cfg.captive)에 따라 구출 · 상실 · 적 잠수함 */
+  freeCaptive(e, diving) {
+    e.carrying = false;
+    const mode = this.cfg.captive;
+    if (diving || mode === 'free') this.rescue = { x: e.x, y: e.y - 12, a: 0 };
+    else if (mode === 'hostile') this.spawnHostileShip(e);
+    else this.boom(e.x, e.y - 12);                                                    // lost: 구하지 못하고 잃는다
+  }
+
+  /** 납치된 잠수함을 잃는다 (직접 맞았거나 납치범이 들이받혔다) */
+  loseCaptive(e) {
+    e.carrying = false;
+    this.boom(e.x, e.y - 12);
+  }
+
+  /** 어려움: 대열에 있는 문어를 잡으면 납치된 잠수함은 구해지지 않고 적이 되어 덤벼든다 */
   spawnHostileShip(boss) {
     const s = new Enemy({ kind: 'ship', slotless: true });
     s.x = boss.x; s.y = boss.y - 12;
@@ -590,7 +602,7 @@ export class Game {
     const pr = player.rect();
     if (this.boss && this.boss.contact(pr)) { this.hitPlayer(); return; }                  // 아귀의 돌진처럼 몸으로 들이받는 보스
     const e = this.enemies.find((en) => en.hittable && overlap(en.rect(), pr));
-    if (e) { this.boom(e.x, e.y); e.carrying = false; e.state = 'gone'; this.hitPlayer(); }
+    if (e) { this.boom(e.x, e.y); e.carrying = false; e.state = 'gone'; this.hitPlayer(); }   // 부딪힌 납치범은 잠수함째 사라진다
   }
 
   /** 방어막이 있으면 한 번 막고, 쌍둥이면 한 대만 잃고 계속, 한 대뿐이면 폭발 */
@@ -614,6 +626,11 @@ export class Game {
     this.shake(4, 24);
     this.phase = 'dying';
     this.timer = 90;
+    this.clearField();
+  }
+
+  /** 잠수함이 죽거나 잡혔을 때: 탄과 구출 중인 잠수함을 치우고, 출격 중인 적은 대열로 돌려보낸다 */
+  clearField() {
     this.bullets = [];
     this.rescue = null;
     for (const e of this.enemies) e.recall();
@@ -623,9 +640,7 @@ export class Game {
   loseShip() {
     this.lives--;
     this.gauge = 0;                                   // 잠수함을 잃으면 모은 게이지도 잃는다
-    this.bullets = [];
-    this.rescue = null;
-    for (const e of this.enemies) e.recall();
+    this.clearField();
     if (this.lives <= 0) { this.finish(); return; }
     this.player.reset(false);
     this.phase = 'ready';

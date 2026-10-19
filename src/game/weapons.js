@@ -19,7 +19,8 @@ export const WEAPON_DEF = {
 /** 무기가 처음 나오는 스테이지 (보통 기준) */
 export const WEAPON_FROM = { spread: 2, laser: 4, homing: 7 };
 /** 난이도에 따라 무기가 나오는 시점이 앞서거나 늦는다 */
-const FROM_SHIFT = { easy: -1, normal: 0, hard: 1, endless: 1 };
+const FROM_SHIFT = { easy: -1, normal: 0, hard: 1 };
+FROM_SHIFT.endless = FROM_SHIFT.hard;                // 무한은 어려움과 같다
 
 /**
  * 아이템 가중치. 쉬우면 방어막·유도탄이 후하고, 어려우면 방어막은 짜고 레이저·해일 충전이 많다.
@@ -29,8 +30,8 @@ export const ITEM_WEIGHTS = {
   easy: { rapid: 3, shield: 4, charge: 2, spread: 3, laser: 2, homing: 3 },
   normal: { rapid: 3, shield: 3, charge: 2, spread: 3, laser: 2, homing: 2 },
   hard: { rapid: 3, shield: 2, charge: 3, spread: 2, laser: 3, homing: 1 },
-  endless: { rapid: 3, shield: 2, charge: 3, spread: 2, laser: 3, homing: 1 },
 };
+ITEM_WEIGHTS.endless = ITEM_WEIGHTS.hard;            // 무한은 어려움과 같다
 
 /** 이 난이도에서 무기가 처음 나오는 스테이지 */
 export const weaponFrom = (weapon, difficulty) => Math.max(1, WEAPON_FROM[weapon] + (FROM_SHIFT[difficulty] ?? 0));
