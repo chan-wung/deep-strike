@@ -8,14 +8,33 @@
     html, body { margin: 0; height: 100%; background: #02101e; }
     body { display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
     #game { display: block; width: 100vw; height: 100vh; object-fit: contain; }
-    #pause { position: fixed; top: 8px; left: 8px; padding: 4px 10px; font: 14px sans-serif; color: #fff; background: #0c4a6e; border: 0; border-radius: 4px; cursor: pointer; }
-    #lang { position: fixed; top: 8px; right: 8px; padding: 4px 10px; font: 14px sans-serif; color: #fff; background: #0c4a6e; border: 0; border-radius: 4px; cursor: pointer; }
+    button { font: 14px sans-serif; color: #fff; background: #0c4a6e; border: 0; border-radius: 4px; cursor: pointer; padding: 4px 10px; }
+    button[hidden] { display: none; }
+    #pause { position: fixed; top: 8px; left: 8px; }
+    #mute { position: fixed; top: 8px; left: 52px; }
+    #lang { position: fixed; top: 8px; right: 8px; }
+    /* 게임 오버·타이틀에서만 보이는 버튼들 */
+    #diff { position: fixed; left: 8px; bottom: max(12px, env(safe-area-inset-bottom)); }
+    #share, #save { position: fixed; bottom: max(12px, env(safe-area-inset-bottom)); padding: 6px 14px; background: #0e7490; }
+    #share { left: 50%; transform: translateX(-104%); }
+    #save { left: 50%; transform: translateX(4%); }
+    /* 터치: 필살기(해일) 버튼. 게이지가 차면 켜진다 */
+    #ult { position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: max(26px, env(safe-area-inset-bottom)); width: 64px; height: 64px; border-radius: 50%; font-size: 28px; padding: 0; opacity: .35; touch-action: none; -webkit-tap-highlight-color: transparent; }
+    #ult.ready { opacity: 1; background: #0891b2; box-shadow: 0 0 14px #67e8f9; }
+    #toast { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); padding: 6px 14px; font: 14px sans-serif; color: #fff; background: rgba(2, 16, 30, .85); border-radius: 6px; pointer-events: none; opacity: 0; transition: opacity .2s; }
+    #toast.show { opacity: 1; }
   </style>
 </head>
 <body>
   <canvas id="game"></canvas>
   <button id="pause" type="button" aria-label="Pause">⏸</button>
+  <button id="mute" type="button" aria-label="Sound">🔊</button>
   <button id="lang" type="button">EN</button>
+  <button id="diff" type="button" hidden></button>
+  <button id="share" type="button" hidden></button>
+  <button id="save" type="button" hidden></button>
+  <button id="ult" type="button" aria-label="Tidal wave" hidden>🌊</button>
+  <div id="toast" role="status"></div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

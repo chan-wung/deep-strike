@@ -1,12 +1,12 @@
-import { H, ENTRY_PATHS, BONUS_PATHS, divePath, beamPath, pathAt } from './paths.js';
+import { H, ENTRY_PATHS, BONUS_PATHS, divePath, beamPath, pathAt, makePath } from './paths.js';
 
-/** score: 대열에 있을 때 · dive: 급강하 중일 때 */
+/** score: 대열에 있을 때 · dive: 급강하 중일 때 · gauge: 잡았을 때 차는 필살기 게이지(급강하 중이면 두 배) */
 export const KINDS = {
-  bee: { score: 50, dive: 100, hp: 1 },          // 해파리
-  butterfly: { score: 80, dive: 160, hp: 1 },    // 복어
-  boss: { score: 150, dive: 400, hp: 2 },        // 문어
-  fish: { score: 100, dive: 100, hp: 1 },        // 보너스 물고기
-  ship: { score: 100, dive: 100, hp: 1 },        // 구하지 못하고 적이 된 잠수함
+  bee: { score: 50, dive: 100, hp: 1, gauge: 3 },          // 해파리
+  butterfly: { score: 80, dive: 160, hp: 1, gauge: 4 },    // 복어
+  boss: { score: 150, dive: 400, hp: 2, gauge: 8 },        // 문어
+  fish: { score: 100, dive: 100, hp: 1, gauge: 0 },        // 보너스 물고기
+  ship: { score: 100, dive: 100, hp: 1, gauge: 3 },        // 구하지 못하고 적이 된 잠수함
 };
 export const SPD = { enter: 2.4, toSlot: 2.6, exit: 2.6, bonus: 2.7 };
 export const BEAM_TICKS = 170;
@@ -39,6 +39,7 @@ export class Enemy {
     this.nextShotY = 0;
     this.timer = 0;
     this.beamLen = 0;
+    this.speedMul = 1;         // 돌진(dash) 급강하는 더 빠르다
   }
 
   get diving() { return DIVING.has(this.state); }
@@ -72,7 +73,7 @@ export class Enemy {
         break;
       }
       case 'dive':
-        this.d += env.diveSpeed;
+        this.d += env.diveSpeed * this.speedMul;
         if (this.follow(this.d)) this.leave(env); else this.maybeFire(env);
         break;
       case 'beamMove':
@@ -101,15 +102,27 @@ export class Enemy {
   /** 화면 아래로 나갔다: 대열이 있으면 위에서 다시 들어오고, 없으면 사라진다 */
   leave(env) {
     this.group = null;
+    this.speedMul = 1;
     if (this.slotless) { this.state = 'gone'; return; }
     const s = env.slot(this.row, this.col);
     this.x = s.x; this.y = -16;
     this.state = 'toSlot';
   }
 
+  /** 돌진: 곡선 없이 플레이어 쪽으로 곧장, 더 빠르게 내리꽂힌다. 탄은 쏘지 않는다 */
+  beginDash(tx) {
+    const x = this.x, y = this.y, ty = H + 24;
+    this.path = makePath([{ x, y }, { x: x + (tx - x) / 3, y: y + (ty - y) / 3 }, { x: x + 2 * (tx - x) / 3, y: y + 2 * (ty - y) / 3 }, { x: tx, y: ty }]);
+    this.d = 0;
+    this.state = 'dive';
+    this.speedMul = 1.7;
+    this.shotsLeft = 0;
+  }
+
   beginDive(env, tx, d) {
     this.path = divePath(this.x, this.y, tx, d);
     this.d = 0;
+    this.speedMul = 1;
     this.state = 'dive';
     this.shotsLeft = env.shotsPerDive;
     this.nextShotY = this.y + 30;
@@ -134,6 +147,7 @@ export class Enemy {
     if (!this.diving) return;
     this.beamLen = 0;
     this.group = null;
+    this.speedMul = 1;
     this.state = this.slotless ? 'gone' : 'toSlot';
   }
 }

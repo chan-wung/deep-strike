@@ -19,8 +19,14 @@ export function setupTouch(game, canvas, root = document.body) {
   document.body.classList.add('touch');
 
   let origin = null;
+  const ult = document.getElementById('ult');             // 필살기 버튼은 터치 기기에서만 보인다
+  if (ult) {
+    ult.hidden = false;
+    ult.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); game.ult(); });
+  }
+
   root.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#lang, #pause')) return;
+    if (e.target.closest('#lang, #pause, #mute, #ult, #share, #save, #diff')) return;
     if (game.paused) { game.resume(); return; }          // 멈춘 화면은 아무 곳이나 터치하면 계속
     game.start();
     origin = { x: e.clientX, px: game.player.x, id: e.pointerId };
