@@ -98,8 +98,7 @@ addEventListener('keydown', (e) => {
   if (game.naming) return;                                   // 이름을 쓰는 중에는 입력창이 키를 받는다 (타이핑이 게임 키로 새지 않게)
   if (e.code === 'F5' || e.metaKey || e.ctrlKey || e.altKey) return;
   sfx.unlock();                                              // 브라우저 정책상 첫 입력 뒤에야 소리를 낼 수 있다
-  const idle = game.phase === 'title' || game.phase === 'over';
-  if (idle && e.code in MOVE_KEYS) {                         // 타이틀·게임 오버에서 좌우 키는 난이도 선택
+  if (game.idle && e.code in MOVE_KEYS) {                         // 타이틀·게임 오버에서 좌우 키는 난이도 선택
     e.preventDefault();
     if (!e.repeat) cycleDifficulty(MOVE_KEYS[e.code]);
     return;
@@ -177,6 +176,7 @@ shareBtn.addEventListener('click', () => { shareRecord(); shareBtn.blur(); });
 saveBtn.addEventListener('click', () => { saveCard(); saveBtn.blur(); });
 
 let savedClears = game.clears.size;
+let last = performance.now(), acc = 0;
 function frame(now) {
   acc += Math.min(now - last, 250);       // 탭이 멈췄다 돌아와도 한꺼번에 몰아 돌리지 않게
   last = now;
@@ -189,8 +189,7 @@ function frame(now) {
   if (game.clears.size !== savedClears) { savedClears = game.clears.size; store.set(CLEARS_KEY, JSON.stringify([...game.clears])); }
   syncNameForm();
 
-  const idle = (game.phase === 'title' || game.phase === 'over') && !game.naming;
-  diffBtn.hidden = !idle;
+  diffBtn.hidden = !game.idle || game.naming;
   shareBtn.hidden = saveBtn.hidden = !(game.phase === 'over' && game.lastRecord && !game.naming);
   ultBtn.classList.toggle('ready', game.gaugeFull && !game.bonus);
   if (diffBtn.textContent !== diffLabel()) showLabels();
@@ -198,6 +197,5 @@ function frame(now) {
   draw(ctx, game);
   requestAnimationFrame(frame);
 }
-let last = performance.now(), acc = 0;
 requestAnimationFrame(frame);
 window.__game = game;     // 개발 중 콘솔에서 상태 확인용

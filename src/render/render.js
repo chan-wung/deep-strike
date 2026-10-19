@@ -3,17 +3,18 @@ import { PLAYER_Y, TWIN_GAP } from '../game/player.js';
 import { BEAM_HALF0, BEAM_SLOPE } from '../game/enemy.js';
 import { ULT_MAX, WAVE_HALF_W, ENDING_SKIP } from '../game/game.js';
 import { WEAPON_TICKS } from '../game/weapons.js';
+import { TAU } from '../game/geom.js';
 import { t } from '../app/i18n.js';
 
 /** 논리 좌표(224×288)를 canvas 에 그릴 때 곱하는 배율 */
 const S = 2;
-const TAU = Math.PI * 2;
 
 const COLOR = {
   sub: '#ffd23f',
   subDark: '#c98f00',
   glass: '#bfefff',
   captive: '#ff5a5a',
+  captiveDark: '#992222',
   jelly: '#ff7aa8',
   puffer: '#ffb347',
   boss: '#9b5cff',
@@ -34,7 +35,7 @@ export function canvasSize() {
   return { width: W * S, height: H * S };
 }
 
-const FONT = '"Neo둥근모", "Press Start 2P", "Malgun Gothic", monospace';
+export const FONT = '"Neo둥근모", "Press Start 2P", "Malgun Gothic", monospace';
 const text = (ctx, s, x, y, size, color, align = 'left') => {
   ctx.font = `bold ${size}px ${FONT}`;
   ctx.textAlign = align;
@@ -280,27 +281,32 @@ function drawSparkle(ctx, e, frame) {
   ctx.restore();
 }
 
+/** 적 종류별 그리기 (원점은 적의 중심) */
+const ENEMY_DRAW = {
+  bee: (ctx, e, frame) => drawJelly(ctx, frame),
+  butterfly: (ctx, e, frame) => drawPuffer(ctx, frame),
+  boss: (ctx, e, frame) => drawOctopus(ctx, frame, e.hp < 2),
+  fish: drawFish,
+  eel: drawEel,
+  ray: drawRay,
+  turtle: drawTurtle,
+  mine: drawMine,
+  ship: (ctx, e, frame) => { ctx.rotate(Math.PI); drawSub(ctx, 0, 0, COLOR.captive, COLOR.captiveDark, frame); },
+};
+
 function drawEnemy(ctx, e, frame) {
   if (e.carries) drawSparkle(ctx, e, frame);
   ctx.save();
   ctx.translate(e.x, e.y);
   if (e.state === 'enter' || e.state === 'dive' || e.state === 'beamMove' || e.state === 'toSlot') ctx.rotate(e.a - Math.PI / 2);
-  if (e.kind === 'bee') drawJelly(ctx, frame);
-  else if (e.kind === 'butterfly') drawPuffer(ctx, frame);
-  else if (e.kind === 'boss') drawOctopus(ctx, frame, e.hp < 2);
-  else if (e.kind === 'fish') drawFish(ctx, e, frame);
-  else if (e.kind === 'eel') drawEel(ctx, e, frame);
-  else if (e.kind === 'ray') drawRay(ctx, e, frame);
-  else if (e.kind === 'turtle') drawTurtle(ctx, e, frame);
-  else if (e.kind === 'mine') drawMine(ctx, e, frame);
-  else if (e.kind === 'ship') { ctx.rotate(Math.PI); drawSub(ctx, 0, 0, COLOR.captive, '#992222', frame); }
+  ENEMY_DRAW[e.kind]?.(ctx, e, frame);
   ctx.restore();
   if (e.speedMul > 1) {                               // 돌진 중인 적은 뒤로 물살 꼬리를 끈다
     ctx.strokeStyle = 'rgba(255,255,255,.35)';
     ctx.lineWidth = 1;
     for (const dx of [-3, 0, 3]) { ctx.beginPath(); ctx.moveTo(e.x + dx, e.y - 8); ctx.lineTo(e.x + dx, e.y - 18); ctx.stroke(); }
   }
-  if (e.carrying) drawSub(ctx, e.x, e.y - 12, COLOR.captive, '#992222', frame);   // 납치한 잠수함을 머리에 이고 있다
+  if (e.carrying) drawSub(ctx, e.x, e.y - 12, COLOR.captive, COLOR.captiveDark, frame);   // 납치한 잠수함을 머리에 이고 있다
 }
 
 /** 문어의 소용돌이: 아래로 벌어지는 원뿔과 아래로 흘러내리는 고리 */
@@ -329,7 +335,6 @@ function drawBeam(ctx, e, frame) {
 
 function drawKraken(ctx, k, frame) {
   ctx.save();
-  if (k.state === 'dying' && (frame >> 1) % 2) ctx.globalAlpha = 0.5;
   ctx.translate(k.x, k.y);
   ctx.scale(4.2, 4.2);
   drawOctopus(ctx, frame, false, BOSS_COLOR.kraken[k.phase - 1]);
@@ -348,7 +353,6 @@ function drawKraken(ctx, k, frame) {
 function drawAngler(ctx, b, frame) {
   const col = BOSS_COLOR.angler[b.phase - 1];
   ctx.save();
-  if (b.state === 'dying' && (frame >> 1) % 2) ctx.globalAlpha = 0.5;
   ctx.translate(b.x, b.y);
   const open = b.lunge ? 1 : 0.35;
   ctx.fillStyle = col;                                              // 몸
@@ -388,7 +392,6 @@ function drawManta(ctx, b, frame) {
   const col = BOSS_COLOR.manta[b.phase - 1];
   const flap = Math.sin(frame * 0.1) * 7;
   ctx.save();
-  if (b.state === 'dying' && (frame >> 1) % 2) ctx.globalAlpha = 0.5;
   ctx.translate(b.x, b.y);
   ctx.strokeStyle = col;                                            // 꼬리
   ctx.lineWidth = 2.5;
@@ -409,7 +412,14 @@ function drawManta(ctx, b, frame) {
   ctx.restore();
 }
 
-const drawBoss = (ctx, b, frame) => (b.kind === 'angler' ? drawAngler : b.kind === 'manta' ? drawManta : drawKraken)(ctx, b, frame);
+const BOSS_DRAW = { kraken: drawKraken, angler: drawAngler, manta: drawManta };
+
+function drawBoss(ctx, b, frame) {
+  ctx.save();
+  if (b.state === 'dying' && (frame >> 1) % 2) ctx.globalAlpha = 0.5;      // 쓰러질 때 깜빡인다
+  BOSS_DRAW[b.kind](ctx, b, frame);
+  ctx.restore();
+}
 
 let darkCanvas = null;
 /** 심해 아귀의 암전: 화면이 어두워지고 빛 미끼 주변과 잠수함 곁만 보인다. 탄은 그 위에 그려 계속 보인다 */
@@ -432,11 +442,11 @@ function drawDarkness(ctx, game) {
     d.fillRect((x - r) * S, (y - r) * S, 2 * r * S, 2 * r * S);
   };
   spot(b.lureX, b.lureY, 52);
-  spot(game.player.x + (game.player.twin ? 7 : 0), PLAYER_Y, 28);
+  spot(game.player.x + (game.player.twin ? TWIN_GAP / 2 : 0), PLAYER_Y, 28);
   ctx.drawImage(darkCanvas, 0, 0, W, H);
 }
 
-function drawKrakenBar(ctx, k) {
+function drawBossBar(ctx, k) {
   const x = 52, w = 166, y = 30;
   text(ctx, t(k.nameKey), 6, y + 6, 8, COLOR.accent);
   ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -602,7 +612,7 @@ function drawHud(ctx, game) {
   text(ctx, String(game.score), 8, 24, 10, COLOR.text);
   text(ctx, t('hud.hi'), W / 2, 12, 9, COLOR.accent, 'center');
   text(ctx, String(game.hiScore), W / 2, 24, 10, COLOR.text, 'center');
-  if (game.boss && game.boss.state !== 'dead') drawKrakenBar(ctx, game.boss);
+  if (game.boss && game.boss.state !== 'dead') drawBossBar(ctx, game.boss);
   if (game.phase === 'over') return;
   for (let i = 0; i < Math.min(game.lives - 1, 5); i++) drawSub(ctx, 14 + i * 16, H - 10, COLOR.sub, COLOR.subDark, 0);
   text(ctx, t('hud.stage', { n: game.stage }), W - 8, H - 6, 9, COLOR.accent, 'right');
@@ -700,7 +710,7 @@ function drawOverlay(ctx, game) {
     if (game.cleared) shadowText(ctx, t('msg.allclear'), cx, 62, 16, COLOR.accent);
     else shadowText(ctx, t('msg.over'), cx, 62, 20, '#ff7a7a');
     shadowText(ctx, `${t('hud.score')} ${game.score}`, cx, 86, 12, COLOR.text);
-    shadowText(ctx, t('over.ratio', { n: shots ? Math.min(100, Math.round(hits / shots * 100)) : 0 }), cx, 102, 9, COLOR.accent);
+    shadowText(ctx, t('over.ratio', { n: game.hitRatio }), cx, 102, 9, COLOR.accent);
     shadowText(ctx, `${t('over.shots', { n: shots })} · ${t('over.hits', { n: hits })}`, cx, 116, 8, '#9fd8ff');
     if (game.naming) shadowText(ctx, t('name.prompt'), cx, 136, 8, '#9ff');
     else if (game.rank && game.rankMode === game.difficulty && (game.frame >> 4) % 2 === 0) {
@@ -747,7 +757,7 @@ export function draw(ctx, game) {
     if (phase !== 'dying' && phase !== 'captured' && phase !== 'over' && phase !== 'ending') drawPlayer(ctx, game);
     if (game.capture) {
       const c = game.capture;
-      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.a); drawSub(ctx, 0, 0, COLOR.captive, '#992222', frame); ctx.restore();
+      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.a); drawSub(ctx, 0, 0, COLOR.captive, COLOR.captiveDark, frame); ctx.restore();
     }
     if (game.rescue) {
       const r = game.rescue;

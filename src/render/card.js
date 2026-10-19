@@ -1,8 +1,7 @@
 import { t } from '../app/i18n.js';
-import { drawSub } from './render.js';
+import { drawSub, FONT } from './render.js';
 
 const CW = 600, CH = 315;
-const FONT = '"Neo둥근모", "Press Start 2P", "Malgun Gothic", sans-serif';
 
 /** 공유용 기록 카드 (600×315). rec: { score, stage, ratio, bosses, diff, date } */
 export function makeCard(rec) {

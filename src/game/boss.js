@@ -1,9 +1,9 @@
 import { W } from './paths.js';
+import { overlap } from './geom.js';
 
 /** 5 · 10 · 15 ... 스테이지의 보스 번호 (1부터) */
 export const bossIndex = (stage) => Math.max(1, Math.round(stage / 5));
 export const BOSS_HOME_Y = 74;
-const overlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
 
 /**
  * 보스의 공통 뼈대. 체력이 줄면 3단계로 사나워지고, enter(내려옴) → fight → dying(쓰러지는 연출) → dead.

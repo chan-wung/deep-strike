@@ -1,4 +1,5 @@
 import { W, H } from './paths.js';
+import { TAU, overlap, boxAt } from './geom.js';
 import { Formation } from './formation.js';
 import { Enemy, KINDS, inBeam } from './enemy.js';
 import { createBoss } from './bosses.js';
@@ -31,11 +32,12 @@ const MAX_MINIONS = 6;
  * 난이도: lives 시작 잠수함 수 · bullet 적 탄 속도 배율 · interval 급강하 간격 배율 · divers 동시 급강하 수 가감 · drop 아이템 확률 · bossHp 보스 체력 배율
  * endless 는 15 스테이지에서 끝나지 않고 계속되는 무한 모드 (어려움과 같은 설정). 세 난이도를 모두 깬 뒤에만 고를 수 있다
  */
+const HARD = { lives: START_LIVES, bullet: 1.2, interval: 0.75, divers: 1, drop: 0.08, bossHp: 1.3 };
 export const DIFFICULTIES = {
   easy: { lives: 4, bullet: 0.85, interval: 1.3, divers: -1, drop: 0.18, bossHp: 0.8 },
   normal: { lives: START_LIVES, bullet: 1, interval: 1, divers: 0, drop: 0.12, bossHp: 1 },
-  hard: { lives: START_LIVES, bullet: 1.2, interval: 0.75, divers: 1, drop: 0.08, bossHp: 1.3 },
-  endless: { lives: START_LIVES, bullet: 1.2, interval: 0.75, divers: 1, drop: 0.08, bossHp: 1.3, endless: true },
+  hard: HARD,
+  endless: { ...HARD, endless: true },
 };
 export const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'endless'];
 /** 이 셋을 모두 깨면 무한 모드가 열린다 */
@@ -49,10 +51,12 @@ const CHARGE_AMOUNT = 40;
 const DASH_FROM = 4;
 /** 편대 급강하(같은 종류 두세 마리가 함께 내려온다)가 나오기 시작하는 스테이지 */
 const SQUAD_FROM = 6;
-const TAU = Math.PI * 2;
 
-const overlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
-const boxAt = (x, y, hw, hh) => ({ x0: x - hw, x1: x + hw, y0: y - hh, y1: y + hh });
+/** pool 에서 e 와 가장 가까운 kind 종류 n 마리 (대열에 있는 것만) */
+const nearestMates = (e, pool, kind, n) => pool
+  .filter((m) => m !== e && m.kind === kind && m.state === 'formation')
+  .sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))
+  .slice(0, n);
 
 /**
  * 게임 규칙 전체. 화면·키보드를 모르므로 node 에서 그대로 테스트할 수 있다.
@@ -88,13 +92,20 @@ export class Game {
   get endlessUnlocked() { return CLEAR_TO_UNLOCK.every((d) => this.clears.has(d)); }
   /** 고를 수 있는 모드: 무한은 열린 뒤에만 */
   get modes() { return this.endlessUnlocked ? DIFFICULTY_ORDER : CLEAR_TO_UNLOCK; }
+  /** 타이틀·게임 오버 화면 (난이도를 고르고 새 판을 시작하는 상태) */
+  get idle() { return this.phase === 'title' || this.phase === 'over'; }
+  /** 이번 판 명중률 (0~100) */
+  get hitRatio() {
+    const { shots, hits } = this.stats;
+    return shots ? Math.min(100, Math.round(hits / shots * 100)) : 0;
+  }
   /** 지금 모드의 내 기록 */
   get records() { return this.boards[this.difficulty]; }
   syncHi() { this.hiScore = this.records[0]?.score || 0; }
 
   /** 타이틀·게임 오버 화면에서만 바꾼다 (이름을 쓰는 중에는 안 된다). 다음 새 게임부터 적용 */
   setDifficulty(name) {
-    if (!DIFFICULTIES[name] || this.naming || (this.phase !== 'title' && this.phase !== 'over')) return;
+    if (!DIFFICULTIES[name] || this.naming || !this.idle) return;
     if (name === 'endless' && !this.endlessUnlocked) return;
     this.difficulty = name;
     this.syncHi();
@@ -156,7 +167,7 @@ export class Game {
   start() {
     if (this.naming) return;
     if (this.phase === 'ending') { if (this.timer >= ENDING_SKIP) this.enterResults(); return; }
-    if (this.phase === 'title' || this.phase === 'over') this.newGame();
+    if (this.idle) this.newGame();
   }
 
   setMove(dir) { this.player.setMove(dir); }
@@ -164,7 +175,7 @@ export class Game {
   moveTo(x) { this.player.moveTo(x); }
 
   /** 일시정지는 타이틀·게임 오버 화면에서는 의미가 없다 */
-  get canPause() { return this.phase !== 'title' && this.phase !== 'over' && this.phase !== 'ending'; }
+  get canPause() { return !this.idle && this.phase !== 'ending'; }
   pause() { if (this.canPause) this.paused = true; }
   resume() { this.paused = false; }
   togglePause() { if (this.paused) this.resume(); else this.pause(); }
@@ -262,7 +273,6 @@ export class Game {
     m.x = x; m.y = y;
     this.assignItems([m]);
     m.beginDive(this.makeEnv(), this.player.x, this.rng() < 0.5 ? -1 : 1);
-    if (kind === 'mine') m.shotsLeft = 0;
     this.enemies.push(m);
   }
 
@@ -434,26 +444,20 @@ export class Game {
     if (e.kind === 'eel') { e.beginSweep(tx); return; }
     if (e.kind === 'ray') { e.beginZigzag(env, tx, d); return; }
     if (e.kind === 'turtle') { e.beginHeavy(env, tx, d); return; }
-    if (e.kind === 'mine') { e.beginDive(env, tx, d); e.shotsLeft = 0; return; }
     const plain = e.kind === 'bee' || e.kind === 'butterfly';
     if (plain && this.stage >= DASH_FROM && this.rng() < Math.min(0.5, (this.stage - DASH_FROM + 1) * 0.1)) { e.beginDash(tx); return; }
     e.beginDive(env, tx, d);
     if (plain) { this.maybeSquadron(e, pool, env, tx, d); return; }
     if (e.kind !== 'boss') return;
     e.group = e.id;
-    const mates = pool.filter((m) => m !== e && m.kind === 'butterfly')
-      .sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))
-      .slice(0, 2);
-    mates.forEach((m, i) => { m.group = e.id; m.beginDive(env, tx + (i ? 14 : -14), d); });
+    nearestMates(e, pool, 'butterfly', 2).forEach((m, i) => { m.group = e.id; m.beginDive(env, tx + (i ? 14 : -14), d); });
   }
 
   /** 편대 급강하: 같은 종류 가까운 두 마리(10 스테이지부터 네 마리)가 함께 내려온다 */
   maybeSquadron(e, pool, env, tx, d) {
     if (this.stage < SQUAD_FROM || this.rng() >= Math.min(0.35, (this.stage - SQUAD_FROM + 1) * 0.07)) return;
-    const mates = pool.filter((m) => m !== e && m.kind === e.kind && m.state === 'formation')
-      .sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))
-      .slice(0, this.stage >= 10 ? 4 : 2);
-    mates.forEach((m, i) => m.beginDive(env, tx + (i % 2 ? 1 : -1) * (8 + 6 * (i >> 1)), d));
+    nearestMates(e, pool, e.kind, this.stage >= 10 ? 4 : 2)
+      .forEach((m, i) => m.beginDive(env, tx + (i % 2 ? 1 : -1) * (8 + 6 * (i >> 1)), d));
   }
 
   enemyFire(e) {
@@ -476,7 +480,7 @@ export class Game {
       const e = this.enemies.find((en) => en.hittable && overlap(sb, en.rect()));
       if (e) { s.dead = true; this.stats.hits++; this.hitEnemy(e); continue; }
       const b = this.boss;
-      if (b && b.targetable && overlap(sb, b.rect())) { s.dead = true; this.stats.hits++; this.addGauge(1); this.damageBoss(1); continue; }
+      if (b && b.targetable && overlap(sb, b.rect())) { s.dead = true; this.hitBoss(); continue; }
       const c = this.enemies.find((en) => en.carrying && overlap(sb, boxAt(en.x, en.y - 12, 6, 6)));
       if (c) { s.dead = true; c.carrying = false; this.boom(c.x, c.y - 12); }   // 납치된 잠수함을 직접 쏘면 잃는다
     }
@@ -494,10 +498,15 @@ export class Game {
     const b = this.boss;
     if (b && b.targetable && !s.hit.has(b) && overlap(sb, b.rect())) {
       s.hit.add(b);
-      this.stats.hits++;
-      this.addGauge(1);
-      this.damageBoss(1);
+      this.hitBoss();
     }
+  }
+
+  /** 어뢰 한 발이 보스에 맞았다 */
+  hitBoss() {
+    this.stats.hits++;
+    this.addGauge(1);
+    this.damageBoss(1);
   }
 
   hitEnemy(e) {
@@ -626,10 +635,9 @@ export class Game {
 
   /** 이번 판 기록을 만들어 둔다. 점수판에는 이름을 받은 뒤 submitName 이 넣는다 */
   buildRecord(cleared) {
-    const { shots, hits, bosses } = this.stats;
     this.lastRecord = {
-      score: this.score, stage: this.stage, ratio: shots ? Math.min(100, Math.round(hits / shots * 100)) : 0,
-      bosses, diff: this.difficulty, cleared,
+      score: this.score, stage: this.stage, ratio: this.hitRatio,
+      bosses: this.stats.bosses, diff: this.difficulty, cleared,
     };
   }
 

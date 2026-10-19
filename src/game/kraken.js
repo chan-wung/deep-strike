@@ -1,9 +1,9 @@
 import { W } from './paths.js';
 import { PLAYER_Y } from './player.js';
 import { Boss, BOSS_HOME_Y } from './boss.js';
+import { TAU } from './geom.js';
 
 export const KRAKEN_Y = BOSS_HOME_Y;
-const TAU = Math.PI * 2;
 
 /**
  * 5 스테이지(그리고 20 · 35 ...)의 크라켄. 체력이 줄면 3단계로 사나워진다.

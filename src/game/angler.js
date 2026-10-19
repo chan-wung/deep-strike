@@ -1,8 +1,8 @@
 import { W } from './paths.js';
 import { PLAYER_Y } from './player.js';
 import { Boss, BOSS_HOME_Y } from './boss.js';
+import { TAU } from './geom.js';
 
-const TAU = Math.PI * 2;
 export const LUNGE_DEPTH = 232;
 /** 화면이 어두워지는 시간(틱) */
 export const DARK_LEN = 210;

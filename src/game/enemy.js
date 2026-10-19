@@ -6,11 +6,11 @@ export const KINDS = {
   butterfly: { score: 80, dive: 160, hp: 1, gauge: 4 },    // 복어
   boss: { score: 150, dive: 400, hp: 2, gauge: 8 },        // 문어
   fish: { score: 100, dive: 100, hp: 1, gauge: 0 },        // 보너스 물고기
-  ship: { score: 100, dive: 100, hp: 1, gauge: 3 },
+  ship: { score: 100, dive: 100, hp: 1, gauge: 3 },         // 구하지 못하고 적이 된 잠수함
   eel: { score: 100, dive: 200, hp: 1, gauge: 4 },          // 전기뱀장어: 화면을 가로로 가로지른다
   ray: { score: 120, dive: 240, hp: 1, gauge: 5 },          // 가오리: 지그재그로 내려오며 3갈래 탄
   turtle: { score: 200, dive: 400, hp: 3, gauge: 6 },       // 거북: 체력 3, 느리지만 단단하다
-  mine: { score: 100, dive: 200, hp: 1, gauge: 4 },         // 폭탄 복어: 잡으면 사방으로 탄이 터진다        // 구하지 못하고 적이 된 잠수함
+  mine: { score: 100, dive: 200, hp: 1, gauge: 4 },         // 폭탄 복어: 잡으면 사방으로 탄이 터진다
 };
 export const SPD = { enter: 2.4, toSlot: 2.6, exit: 2.6, bonus: 2.7 };
 export const BEAM_TICKS = 170;
@@ -155,7 +155,7 @@ export class Enemy {
     this.d = 0;
     this.speedMul = 1;
     this.state = 'dive';
-    this.shotsLeft = env.shotsPerDive;
+    this.shotsLeft = this.kind === 'mine' ? 0 : env.shotsPerDive;   // 폭탄 복어는 쏘지 않고 터진다
     this.nextShotY = this.y + 30;
   }
 
