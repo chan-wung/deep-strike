@@ -1,7 +1,7 @@
 import { W, H } from './paths.js';
 import { Formation } from './formation.js';
 import { Enemy, KINDS, inBeam } from './enemy.js';
-import { Kraken } from './kraken.js';
+import { createBoss } from './bosses.js';
 import { Player, PLAYER_Y, TWIN_GAP, RAPID_TICKS } from './player.js';
 import { buildStage, isBonus, isBoss, BONUS_FISH } from './stage.js';
 
@@ -33,6 +33,9 @@ const ITEM_FALL = 1.1;
 const CHARGE_AMOUNT = 40;
 /** 돌진 급강하가 나오기 시작하는 스테이지 */
 const DASH_FROM = 4;
+/** 편대 급강하(같은 종류 두세 마리가 함께 내려온다)가 나오기 시작하는 스테이지 */
+const SQUAD_FROM = 6;
+const TAU = Math.PI * 2;
 
 const overlap = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
 const boxAt = (x, y, hw, hh) => ({ x0: x - hw, x1: x + hw, y0: y - hh, y1: y + hh });
@@ -90,7 +93,7 @@ export class Game {
   }
 
   startStage() {
-    this.boss = isBoss(this.stage) ? new Kraken(this.stage, this.cfg.bossHp) : null;
+    this.boss = isBoss(this.stage) ? createBoss(this.stage, this.cfg.bossHp) : null;
     this.enemies = this.boss ? [] : buildStage(this.stage);
     this.assignItems(this.enemies);
     this.wave = null;
@@ -206,17 +209,19 @@ export class Game {
         const v = s * this.cfg.bullet;
         this.bullets.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v });
       },
-      minion: (x, y) => this.spawnMinion(x, y),
+      minion: (x, y, kind) => this.spawnMinion(x, y, kind),
+      rand: () => this.rng(),
     };
   }
 
-  /** 크라켄이 풀어 놓는 해파리: 곧바로 플레이어를 향해 급강하한다 */
-  spawnMinion(x, y) {
+  /** 보스가 풀어 놓는 졸개(해파리나 폭탄 복어): 곧바로 플레이어를 향해 급강하한다 */
+  spawnMinion(x, y, kind = 'bee') {
     if (this.enemies.length >= MAX_MINIONS) return;
-    const m = new Enemy({ kind: 'bee', slotless: true });
+    const m = new Enemy({ kind, slotless: true });
     m.x = x; m.y = y;
     this.assignItems([m]);
     m.beginDive(this.makeEnv(), this.player.x, this.rng() < 0.5 ? -1 : 1);
+    if (kind === 'mine') m.shotsLeft = 0;
     this.enemies.push(m);
   }
 
@@ -368,14 +373,29 @@ export class Game {
     const tx = Math.max(30, Math.min(W - 30, this.player.x));
     if (e.kind === 'boss' && this.canCapture() && this.rng() < 0.6) { e.beginBeam(tx, d); return; }
     const env = this.makeEnv();
-    if (e.kind !== 'boss' && this.stage >= DASH_FROM && this.rng() < Math.min(0.5, (this.stage - DASH_FROM + 1) * 0.1)) { e.beginDash(tx); return; }
+    if (e.kind === 'eel') { e.beginSweep(tx); return; }
+    if (e.kind === 'ray') { e.beginZigzag(env, tx, d); return; }
+    if (e.kind === 'turtle') { e.beginHeavy(env, tx, d); return; }
+    if (e.kind === 'mine') { e.beginDive(env, tx, d); e.shotsLeft = 0; return; }
+    const plain = e.kind === 'bee' || e.kind === 'butterfly';
+    if (plain && this.stage >= DASH_FROM && this.rng() < Math.min(0.5, (this.stage - DASH_FROM + 1) * 0.1)) { e.beginDash(tx); return; }
     e.beginDive(env, tx, d);
+    if (plain) { this.maybeSquadron(e, pool, env, tx, d); return; }
     if (e.kind !== 'boss') return;
     e.group = e.id;
     const mates = pool.filter((m) => m !== e && m.kind === 'butterfly')
       .sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))
       .slice(0, 2);
     mates.forEach((m, i) => { m.group = e.id; m.beginDive(env, tx + (i ? 14 : -14), d); });
+  }
+
+  /** 편대 급강하: 같은 종류 가까운 두 마리(10 스테이지부터 네 마리)가 함께 내려온다 */
+  maybeSquadron(e, pool, env, tx, d) {
+    if (this.stage < SQUAD_FROM || this.rng() >= Math.min(0.35, (this.stage - SQUAD_FROM + 1) * 0.07)) return;
+    const mates = pool.filter((m) => m !== e && m.kind === e.kind && m.state === 'formation')
+      .sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))
+      .slice(0, this.stage >= 10 ? 4 : 2);
+    mates.forEach((m, i) => m.beginDive(env, tx + (i % 2 ? 1 : -1) * (8 + 6 * (i >> 1)), d));
   }
 
   enemyFire(e) {
@@ -385,7 +405,9 @@ export class Game {
     let ang = Math.atan2(dy, dx) + (this.rng() - 0.5) * 0.3;
     ang = Math.max(Math.PI * 0.25, Math.min(Math.PI * 0.75, ang));
     const sp = Math.min(1.5 + 0.08 * this.stage, 2.8) * this.cfg.bullet;
-    this.bullets.push({ x: e.x, y: e.y + 6, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp });
+    for (const o of e.kind === 'ray' ? [-0.35, 0, 0.35] : [0]) {
+      this.bullets.push({ x: e.x, y: e.y + 6, vx: Math.cos(ang + o) * sp, vy: Math.sin(ang + o) * sp });
+    }
   }
 
   shotsVsEnemies() {
@@ -422,6 +444,10 @@ export class Game {
     this.popup(e.x, e.y, String(pts));
     this.boom(e.x, e.y);
     if (e.carries) this.dropItem(e.x, e.y, e.carries);
+    if (e.kind === 'mine' && !this.bonus) {                                           // 폭탄 복어는 터지며 사방으로 탄을 흩뿌린다
+      const env = this.makeEnv();
+      for (let i = 0; i < 8; i++) env.shoot(e.x, e.y, i * TAU / 8 + 0.2, 1.3);
+    }
     if (e.carrying) {
       e.carrying = false;
       if (diving) this.rescue = { x: e.x, y: e.y - 12, a: 0 };
@@ -477,6 +503,7 @@ export class Game {
     const { player } = this;
     if (player.invuln > 0) return;
     const pr = player.rect();
+    if (this.boss && this.boss.contact(pr)) { this.hitPlayer(); return; }                  // 아귀의 돌진처럼 몸으로 들이받는 보스
     const e = this.enemies.find((en) => en.hittable && overlap(en.rect(), pr));
     if (e) { this.boom(e.x, e.y); e.carrying = false; e.state = 'gone'; this.hitPlayer(); }
   }

@@ -77,3 +77,24 @@ export function beamPath(x, y, tx, d) {
     x + d * 20, y + 100, tx, y + 110, tx, BEAM_Y,
   ]));
 }
+
+/** 전기뱀장어: 대열에서 내려와 화면을 가로로 길게 가로지른다 (tx 에 따라 가로지르는 높이가 달라진다) */
+export function sweepPath(x, y, tx) {
+  const dir = x < W / 2 ? 1 : -1;
+  const sy = 130 + (Math.round(tx) % 60);
+  const endX = dir > 0 ? W + 24 : -24;
+  return makePath(pts([
+    x, y, x, y + (sy - y) * 0.3, x, y + (sy - y) * 0.7, x + dir * 10, sy,
+    x + dir * 70, sy - 36, x + dir * 120, sy + 36, endX, sy,
+  ]));
+}
+
+/** 가오리: 좌우로 지그재그 내려오다 플레이어 쪽으로 빠진다. d 는 처음 꺾는 방향(-1/1) */
+export function zigzagPath(x, y, tx, d) {
+  return makePath(pts([
+    x, y, x + d * 10, y + 20, x + d * 45, y + 30, x + d * 45, y + 55,
+    x + d * 45, y + 80, x - d * 30, y + 80, x - d * 30, y + 110,
+    x - d * 30, y + 140, tx + d * 25, 160, tx + d * 25, 190,
+    tx + d * 25, 230, tx, 260, tx, H + 24,
+  ]));
+}

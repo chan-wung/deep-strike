@@ -22,7 +22,12 @@ const COLOR = {
   accent: '#ffd23f',
   tide: '#35d0ff',
 };
-const KRAKEN_COLOR = ['#7a3dd8', '#d6489b', '#e5484d'];
+/** 보스별 단계 색 (체력 막대와 몸 색) */
+const BOSS_COLOR = {
+  kraken: ['#7a3dd8', '#d6489b', '#e5484d'],
+  angler: ['#2f6fb0', '#3d9bd6', '#7fe0ff'],
+  manta: ['#2fae8f', '#e0a526', '#e5484d'],
+};
 
 export function canvasSize() {
   return { width: W * S, height: H * S };
@@ -162,6 +167,81 @@ function drawOctopus(ctx, frame, hit, color) {
   eyes(ctx, 2.8, -1.5, 1.8);
 }
 
+/** 전기뱀장어: 구불구불한 몸에 전기 불꽃 */
+function drawEel(ctx, e, frame) {
+  ctx.strokeStyle = '#c8ff3d';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = 0; i <= 8; i++) {
+    const y = -9 + i * 2.2, x = Math.sin(frame * 0.25 + i * 0.7 + e.id) * 3;
+    if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+  }
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+  ctx.fillStyle = '#e8ff7a';
+  ctx.beginPath(); ctx.arc(Math.sin(frame * 0.25 + 5.6 + e.id) * 3, 8.5, 3, 0, TAU); ctx.fill();
+  eyes(ctx, 1.2, 8, 0.9);
+  if ((frame + e.id) % 14 < 5) {                                       // 지직
+    ctx.strokeStyle = '#fffbb0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-5, -4); ctx.lineTo(-2, -1); ctx.lineTo(-5, 2); ctx.lineTo(-2, 5);
+    ctx.moveTo(5, -2); ctx.lineTo(2, 1); ctx.lineTo(5, 4);
+    ctx.stroke();
+  }
+}
+
+/** 가오리: 펄럭이는 마름모 날개 */
+function drawRay(ctx, e, frame) {
+  const flap = Math.sin(frame * 0.2 + e.id) * 3;
+  ctx.fillStyle = '#8e7bff';
+  ctx.beginPath();
+  ctx.moveTo(-9, -1 - flap); ctx.lineTo(0, -5); ctx.lineTo(9, -1 - flap); ctx.lineTo(0, 7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#b9aeff';
+  ctx.beginPath(); ctx.ellipse(0, 0, 3, 4.5, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#8e7bff';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(Math.sin(frame * 0.2) * 2, -10); ctx.stroke();
+  eyes(ctx, 1.8, 2.5, 1);
+}
+
+/** 거북: 맞을수록 껍질 색이 바뀐다 (체력 3 → 2 → 1) */
+function drawTurtle(ctx, e, frame) {
+  const shell = ['#d9732b', '#c9b23a', '#3fa65a'][Math.max(0, e.hp - 1)] ?? '#3fa65a';
+  ctx.fillStyle = '#9bd17a';
+  const paddle = Math.sin(frame * 0.15 + e.id) * 1.5;
+  ctx.beginPath(); ctx.ellipse(-6.5, -1 + paddle, 2.2, 1.4, 0.5, 0, TAU); ctx.ellipse(6.5, -1 - paddle, 2.2, 1.4, -0.5, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 6, 2.6, 0, TAU); ctx.fill();            // 머리
+  ctx.fillStyle = shell;
+  ctx.beginPath(); ctx.ellipse(0, 0, 7, 5.6, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.3)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(5, 0); ctx.moveTo(0, -5); ctx.lineTo(0, 5); ctx.stroke();
+  ctx.fillStyle = '#102030';
+  ctx.beginPath(); ctx.arc(-1.1, 6.6, 0.6, 0, TAU); ctx.arc(1.1, 6.6, 0.6, 0, TAU); ctx.fill();
+}
+
+/** 폭탄 복어: 가시 돋친 어두운 몸, 가운데에서 붉은 불이 깜빡인다 */
+function drawMine(ctx, e, frame) {
+  ctx.strokeStyle = '#7d8797';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < 10; i++) {
+    const a = i * TAU / 10;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 5, Math.sin(a) * 5);
+    ctx.lineTo(Math.cos(a) * 8, Math.sin(a) * 8);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#4a5363';
+  ctx.beginPath(); ctx.arc(0, 0, 5.4, 0, TAU); ctx.fill();
+  const blink = 0.5 + 0.5 * Math.sin(frame * 0.3 + e.id);
+  ctx.fillStyle = `rgba(255,70,70,${0.4 + 0.6 * blink})`;
+  ctx.beginPath(); ctx.arc(0, 0, 2.2 + blink * 0.8, 0, TAU); ctx.fill();
+}
+
 function drawFish(ctx, e, frame) {
   const hue = 190 + e.wave * 35;
   ctx.fillStyle = `hsl(${hue} 80% 60%)`;
@@ -208,6 +288,10 @@ function drawEnemy(ctx, e, frame) {
   else if (e.kind === 'butterfly') drawPuffer(ctx, frame);
   else if (e.kind === 'boss') drawOctopus(ctx, frame, e.hp < 2);
   else if (e.kind === 'fish') drawFish(ctx, e, frame);
+  else if (e.kind === 'eel') drawEel(ctx, e, frame);
+  else if (e.kind === 'ray') drawRay(ctx, e, frame);
+  else if (e.kind === 'turtle') drawTurtle(ctx, e, frame);
+  else if (e.kind === 'mine') drawMine(ctx, e, frame);
   else if (e.kind === 'ship') { ctx.rotate(Math.PI); drawSub(ctx, 0, 0, COLOR.captive, '#992222', frame); }
   ctx.restore();
   if (e.speedMul > 1) {                               // 돌진 중인 적은 뒤로 물살 꼬리를 끈다
@@ -247,7 +331,7 @@ function drawKraken(ctx, k, frame) {
   if (k.state === 'dying' && (frame >> 1) % 2) ctx.globalAlpha = 0.5;
   ctx.translate(k.x, k.y);
   ctx.scale(4.2, 4.2);
-  drawOctopus(ctx, frame, false, KRAKEN_COLOR[k.phase - 1]);
+  drawOctopus(ctx, frame, false, BOSS_COLOR.kraken[k.phase - 1]);
   if (k.phase === 3) {                                // 격노: 눈이 붉게
     ctx.fillStyle = 'rgba(255,40,40,.55)';
     ctx.beginPath(); ctx.arc(-2.8, -1.2, 1.1, 0, TAU); ctx.arc(2.8, -1.2, 1.1, 0, TAU); ctx.fill();
@@ -259,12 +343,104 @@ function drawKraken(ctx, k, frame) {
   ctx.restore();
 }
 
+/** 심해 아귀: 입을 벌려 돌진하고, 머리의 빛 미끼가 환하다 */
+function drawAngler(ctx, b, frame) {
+  const col = BOSS_COLOR.angler[b.phase - 1];
+  ctx.save();
+  if (b.state === 'dying' && (frame >> 1) % 2) ctx.globalAlpha = 0.5;
+  ctx.translate(b.x, b.y);
+  const open = b.lunge ? 1 : 0.35;
+  ctx.fillStyle = col;                                              // 몸
+  ctx.beginPath(); ctx.ellipse(0, -2, 32, 23, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.25)';
+  ctx.beginPath(); ctx.ellipse(0, 4, 26, 14, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = col;                                              // 지느러미
+  ctx.beginPath(); ctx.moveTo(-30, -6); ctx.lineTo(-44, -16 + Math.sin(frame * 0.2) * 3); ctx.lineTo(-30, 8); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(30, -6); ctx.lineTo(44, -16 + Math.sin(frame * 0.2 + 1) * 3); ctx.lineTo(30, 8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#0a1420';                                        // 입
+  ctx.beginPath(); ctx.ellipse(0, 12, 22, 4 + open * 8, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#fff';                                           // 이빨
+  const mouth = 3 + open * 7;
+  for (let i = -4; i <= 4; i++) {
+    ctx.beginPath(); ctx.moveTo(i * 4.6 - 2, 12 - mouth); ctx.lineTo(i * 4.6, 12 - mouth + 5); ctx.lineTo(i * 4.6 + 2, 12 - mouth); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(i * 4.6 - 2, 12 + mouth); ctx.lineTo(i * 4.6, 12 + mouth - 5); ctx.lineTo(i * 4.6 + 2, 12 + mouth); ctx.fill();
+  }
+  ctx.fillStyle = '#ffe14a';                                        // 눈
+  ctx.beginPath(); ctx.arc(-13, -9, 5.5, 0, TAU); ctx.arc(13, -9, 5.5, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#102030';
+  ctx.fillRect(-13.6, -13, 1.6, 8); ctx.fillRect(12.4, -13, 1.6, 8);
+  if (b.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(0, -2, 32, 23, 0, 0, TAU); ctx.fill(); }
+  const lx = b.lureX - b.x, ly = b.lureY - b.y;                      // 빛 미끼
+  ctx.strokeStyle = '#7fe0ff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, -22); ctx.quadraticCurveTo(lx * 0.4, -26, lx, ly - 2); ctx.stroke();
+  const glow = 0.6 + 0.4 * Math.sin(frame * 0.2);
+  ctx.fillStyle = `rgba(127,224,255,${0.25 * glow})`;
+  ctx.beginPath(); ctx.arc(lx, ly, 13, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#d9fbff';
+  ctx.beginPath(); ctx.arc(lx, ly, 4.5, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+/** 거대 가오리: 넓은 날개를 펄럭인다 */
+function drawManta(ctx, b, frame) {
+  const col = BOSS_COLOR.manta[b.phase - 1];
+  const flap = Math.sin(frame * 0.1) * 7;
+  ctx.save();
+  if (b.state === 'dying' && (frame >> 1) % 2) ctx.globalAlpha = 0.5;
+  ctx.translate(b.x, b.y);
+  ctx.strokeStyle = col;                                            // 꼬리
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(0, -10); ctx.quadraticCurveTo(Math.sin(frame * 0.1) * 8, -24, Math.sin(frame * 0.1 + 1) * 6, -38); ctx.stroke();
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(-44, -4 - flap); ctx.quadraticCurveTo(-24, -22, 0, -10); ctx.quadraticCurveTo(24, -22, 44, -4 - flap);
+  ctx.quadraticCurveTo(26, 14, 0, 24); ctx.quadraticCurveTo(-26, 14, -44, -4 - flap);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.18)';                           // 배
+  ctx.beginPath(); ctx.ellipse(0, 4, 13, 14, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#ffe14a';
+  ctx.beginPath(); ctx.arc(-9, 10, 3.2, 0, TAU); ctx.arc(9, 10, 3.2, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#102030';
+  ctx.beginPath(); ctx.arc(-9, 10.6, 1.4, 0, TAU); ctx.arc(9, 10.6, 1.4, 0, TAU); ctx.fill();
+  if (b.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(0, 4, 40, 18, 0, 0, TAU); ctx.fill(); }
+  ctx.restore();
+}
+
+const drawBoss = (ctx, b, frame) => (b.kind === 'angler' ? drawAngler : b.kind === 'manta' ? drawManta : drawKraken)(ctx, b, frame);
+
+let darkCanvas = null;
+/** 심해 아귀의 암전: 화면이 어두워지고 빛 미끼 주변과 잠수함 곁만 보인다. 탄은 그 위에 그려 계속 보인다 */
+function drawDarkness(ctx, game) {
+  const b = game.boss, a = b.darkness;
+  if (a <= 0) return;
+  if (!darkCanvas) { darkCanvas = document.createElement('canvas'); darkCanvas.width = W * S; darkCanvas.height = H * S; }
+  const d = darkCanvas.getContext('2d');
+  d.setTransform(1, 0, 0, 1, 0, 0);
+  d.globalCompositeOperation = 'source-over';
+  d.clearRect(0, 0, darkCanvas.width, darkCanvas.height);
+  d.fillStyle = `rgba(0,4,12,${0.9 * a})`;
+  d.fillRect(0, 0, darkCanvas.width, darkCanvas.height);
+  d.globalCompositeOperation = 'destination-out';
+  const spot = (x, y, r) => {
+    const g = d.createRadialGradient(x * S, y * S, r * 0.15 * S, x * S, y * S, r * S);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    d.fillStyle = g;
+    d.fillRect((x - r) * S, (y - r) * S, 2 * r * S, 2 * r * S);
+  };
+  spot(b.lureX, b.lureY, 52);
+  spot(game.player.x + (game.player.twin ? 7 : 0), PLAYER_Y, 28);
+  ctx.drawImage(darkCanvas, 0, 0, W, H);
+}
+
 function drawKrakenBar(ctx, k) {
   const x = 52, w = 166, y = 30;
-  text(ctx, t('msg.boss.name'), 6, y + 6, 8, COLOR.accent);
+  text(ctx, t(k.nameKey), 6, y + 6, 8, COLOR.accent);
   ctx.fillStyle = 'rgba(0,0,0,.55)';
   ctx.fillRect(x, y, w, 6);
-  ctx.fillStyle = KRAKEN_COLOR[k.phase - 1];
+  ctx.fillStyle = BOSS_COLOR[k.kind][k.phase - 1];
   ctx.fillRect(x + 1, y + 1, (w - 2) * (k.hp / k.maxHp), 4);
   ctx.strokeStyle = 'rgba(255,255,255,.7)';
   ctx.lineWidth = 1;
@@ -437,10 +613,10 @@ function drawOverlay(ctx, game) {
     else if (game.boss) {
       if ((game.frame >> 3) % 2 === 0) shadowText(ctx, t('msg.warning'), cx, 128, 18, '#ff5a5a');
       shadowText(ctx, t('msg.boss'), cx, 152, 14, COLOR.accent);
-      shadowText(ctx, t('msg.boss.name'), cx, 172, 11, COLOR.text);
+      shadowText(ctx, t(game.boss.nameKey), cx, 172, 11, COLOR.text);
     } else shadowText(ctx, game.bonus ? t('msg.bonus') : t('msg.stage', { n: game.stage }), cx, 150, 16, COLOR.accent);
   } else if (phase === 'clear') {
-    shadowText(ctx, game.boss ? t('msg.bossdown') : t('msg.clear'), cx, 150, 16, COLOR.accent);
+    shadowText(ctx, game.boss ? t('msg.bossdown', { name: t(game.boss.nameKey) }) : t('msg.clear'), cx, 150, 16, COLOR.accent);
   } else if (phase === 'captured') {
     shadowText(ctx, t('msg.captured'), cx, 150, 16, '#ff7a7a');
   } else if (phase === 'bonusResult' && game.result) {
@@ -489,9 +665,10 @@ export function draw(ctx, game) {
     if (e.state === 'wait' || e.state === 'gone') continue;
     drawEnemy(ctx, e, frame);
   }
-  if (game.boss && game.boss.state !== 'dead' && phase !== 'title') drawKraken(ctx, game.boss, frame);
+  if (game.boss && game.boss.state !== 'dead' && phase !== 'title') drawBoss(ctx, game.boss, frame);
   if (phase !== 'title') {
     for (const it of game.items) drawItem(ctx, it, frame);
+    if (game.boss && game.boss.kind === 'angler') drawDarkness(ctx, game);
     if (phase !== 'dying' && phase !== 'captured' && phase !== 'over') drawPlayer(ctx, game);
     if (game.capture) {
       const c = game.capture;

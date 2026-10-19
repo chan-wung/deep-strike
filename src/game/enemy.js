@@ -1,4 +1,4 @@
-import { H, ENTRY_PATHS, BONUS_PATHS, divePath, beamPath, pathAt, makePath } from './paths.js';
+import { H, ENTRY_PATHS, BONUS_PATHS, divePath, beamPath, sweepPath, zigzagPath, pathAt, makePath } from './paths.js';
 
 /** score: 대열에 있을 때 · dive: 급강하 중일 때 · gauge: 잡았을 때 차는 필살기 게이지(급강하 중이면 두 배) */
 export const KINDS = {
@@ -6,7 +6,11 @@ export const KINDS = {
   butterfly: { score: 80, dive: 160, hp: 1, gauge: 4 },    // 복어
   boss: { score: 150, dive: 400, hp: 2, gauge: 8 },        // 문어
   fish: { score: 100, dive: 100, hp: 1, gauge: 0 },        // 보너스 물고기
-  ship: { score: 100, dive: 100, hp: 1, gauge: 3 },        // 구하지 못하고 적이 된 잠수함
+  ship: { score: 100, dive: 100, hp: 1, gauge: 3 },
+  eel: { score: 100, dive: 200, hp: 1, gauge: 4 },          // 전기뱀장어: 화면을 가로로 가로지른다
+  ray: { score: 120, dive: 240, hp: 1, gauge: 5 },          // 가오리: 지그재그로 내려오며 3갈래 탄
+  turtle: { score: 200, dive: 400, hp: 3, gauge: 6 },       // 거북: 체력 3, 느리지만 단단하다
+  mine: { score: 100, dive: 200, hp: 1, gauge: 4 },         // 폭탄 복어: 잡으면 사방으로 탄이 터진다        // 구하지 못하고 적이 된 잠수함
 };
 export const SPD = { enter: 2.4, toSlot: 2.6, exit: 2.6, bonus: 2.7 };
 export const BEAM_TICKS = 170;
@@ -118,6 +122,32 @@ export class Enemy {
     this.state = 'dive';
     this.speedMul = 1.7;
     this.shotsLeft = 0;
+  }
+
+  /** 전기뱀장어: 탄 없이 화면을 가로로 가로지른다 */
+  beginSweep(tx) {
+    this.path = sweepPath(this.x, this.y, tx);
+    this.d = 0;
+    this.speedMul = 1.25;
+    this.state = 'dive';
+    this.shotsLeft = 0;
+  }
+
+  /** 가오리: 지그재그로 내려오며 한 번 3갈래로 쏜다 */
+  beginZigzag(env, tx, d) {
+    this.path = zigzagPath(this.x, this.y, tx, d);
+    this.d = 0;
+    this.speedMul = 1;
+    this.state = 'dive';
+    this.shotsLeft = 1;
+    this.nextShotY = this.y + 60;
+  }
+
+  /** 거북: 느리게 내려오며 두 번 쏜다 */
+  beginHeavy(env, tx, d) {
+    this.beginDive(env, tx, d);
+    this.speedMul = 0.65;
+    this.shotsLeft = 2;
   }
 
   beginDive(env, tx, d) {

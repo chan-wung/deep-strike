@@ -10,6 +10,18 @@ export const ROW_COLS = [
 ];
 export const ROW_KIND = ['boss', 'butterfly', 'butterfly', 'bee', 'bee'];
 
+const cols = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+const WING = [...cols(0, 3), ...cols(6, 9)];
+/** 스테이지마다 바뀌는 대열 모양. 줄마다의 칸 번호이고 모두 합쳐 40칸이다 */
+export const SHAPES = {
+  rect: ROW_COLS,                                                                   // 직사각형
+  pyramid: [cols(3, 6), cols(2, 7), cols(0, 9), cols(0, 9), cols(0, 9)],            // 피라미드: 위가 좁다
+  vee: [cols(3, 6), cols(0, 9), cols(0, 9), cols(1, 8), cols(1, 8)],                // 역삼각형: 위가 넓다
+  diamond: [cols(3, 6), cols(1, 8), cols(0, 9), cols(0, 9), cols(1, 8)],            // 다이아몬드
+  wings: [cols(3, 6), WING, WING, cols(0, 9), cols(0, 9)],                          // 양 날개: 가운데가 비었다
+};
+export const SHAPE_ORDER = ['rect', 'pyramid', 'vee', 'diamond', 'wings'];
+
 const SX = 16, SY = 15, TOP = 44, SWAY = 14;
 
 /**
