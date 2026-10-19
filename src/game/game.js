@@ -12,8 +12,10 @@ const BOSS_SCORE = 5000;
 /** 필살기(해일): 게이지가 가득 차면 쓴다. 바닥에서 위로 쓸어 올라가며 탄을 지우고 적에게 피해를 준다 */
 export const ULT_MAX = 100;
 const WAVE_SPEED = 6;
-const WAVE_DAMAGE = 2;
-const WAVE_BOSS_DAMAGE = 15;
+const WAVE_DAMAGE = 1;
+const WAVE_BOSS_DAMAGE = 10;
+/** 해일 기둥의 반폭: 쓴 순간 잠수함 위치를 중심으로 이만큼 좌우만 훑는다 (전체 폭 약 70px) */
+export const WAVE_HALF_W = 35;
 const MAX_BULLETS_BOSS = 48;
 const MAX_MINIONS = 6;
 
@@ -90,6 +92,7 @@ export class Game {
   startStage() {
     this.boss = isBoss(this.stage) ? new Kraken(this.stage, this.cfg.bossHp) : null;
     this.enemies = this.boss ? [] : buildStage(this.stage);
+    this.assignItems(this.enemies);
     this.wave = null;
     this.items = [];
     this.shakeT = 0;
@@ -133,7 +136,8 @@ export class Game {
   ult() {
     if (!this.ultReady) return false;
     this.gauge = 0;
-    this.wave = { y: H + 10, hit: new Set(), boss: false };
+    const { player } = this;
+    this.wave = { x: player.x + (player.twin ? TWIN_GAP / 2 : 0), y: H + 10, hit: new Set(), boss: false };
     this.emit('ult');
     this.shake(2.5, 40);
     return true;
@@ -211,6 +215,7 @@ export class Game {
     if (this.enemies.length >= MAX_MINIONS) return;
     const m = new Enemy({ kind: 'bee', slotless: true });
     m.x = x; m.y = y;
+    this.assignItems([m]);
     m.beginDive(this.makeEnv(), this.player.x, this.rng() < 0.5 ? -1 : 1);
     this.enemies.push(m);
   }
@@ -272,9 +277,16 @@ export class Game {
     }
   }
 
-  /** 아이템이 떨어진다: 보너스 물고기는 떨어뜨리지 않는다 */
-  dropItem(x, y) {
-    this.items.push({ x, y, type: ITEM_TYPES[Math.floor(this.rng() * ITEM_TYPES.length)] });
+  /** 일부 적은 아이템을 품고 나온다 (난이도별 확률). 미리 정해 두어 화면에서 반짝이게 하고, 잡으면 반드시 떨어뜨린다. 보너스 물고기는 제외 */
+  assignItems(list) {
+    for (const e of list) {
+      if (e.kind === 'fish' || this.rng() >= this.cfg.drop) continue;
+      e.carries = ITEM_TYPES[Math.floor(this.rng() * ITEM_TYPES.length)];
+    }
+  }
+
+  dropItem(x, y, type) {
+    this.items.push({ x, y, type });
   }
 
   /** 잠수함에 닿은 아이템을 먹는다 */
@@ -298,15 +310,16 @@ export class Game {
     if (!w) return;
     w.y -= WAVE_SPEED;
     this.player.invuln = Math.max(this.player.invuln, 2);        // 해일이 지나는 동안은 맞지 않는다
-    this.bullets = this.bullets.filter((b) => b.y < w.y);       // 해일 아래에 잠긴 탄은 지워진다
+    const inColumn = (x, pad = 0) => Math.abs(x - w.x) <= WAVE_HALF_W + pad;
+    this.bullets = this.bullets.filter((b) => b.y < w.y || !inColumn(b.x));   // 기둥 안에서 해일 아래에 잠긴 탄만 지워진다
     for (const e of this.enemies) {
-      if (!e.hittable || w.hit.has(e.id) || e.y < w.y) continue;
+      if (!e.hittable || w.hit.has(e.id) || e.y < w.y || !inColumn(e.x, 6)) continue;
       w.hit.add(e.id);
       e.hp -= WAVE_DAMAGE;
       if (e.hp <= 0) this.kill(e, true); else this.boom(e.x, e.y);
     }
     const b = this.boss;
-    if (b && !w.boss && b.y + 24 >= w.y) {
+    if (b && !w.boss && b.y + 24 >= w.y && inColumn(b.x, 30)) {
       w.boss = true;
       this.damageBoss(WAVE_BOSS_DAMAGE);
     }
@@ -408,7 +421,7 @@ export class Game {
     this.addScore(pts);
     this.popup(e.x, e.y, String(pts));
     this.boom(e.x, e.y);
-    if (e.kind !== 'fish' && this.rng() < this.cfg.drop) this.dropItem(e.x, e.y);
+    if (e.carries) this.dropItem(e.x, e.y, e.carries);
     if (e.carrying) {
       e.carrying = false;
       if (diving) this.rescue = { x: e.x, y: e.y - 12, a: 0 };

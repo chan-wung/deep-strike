@@ -1,5 +1,6 @@
 import { Game, TICRATE, DIFFICULTIES, DIFFICULTY_ORDER, ITEM_TYPES } from '../src/game/game.js';
 import { Enemy } from '../src/game/enemy.js';
+import { buildStage } from '../src/game/stage.js';
 import { Player, RAPID_TICKS } from '../src/game/player.js';
 import { PLAYER_Y } from '../src/game/player.js';
 import { H } from '../src/game/paths.js';
@@ -41,34 +42,50 @@ check('적 탄은 어려울수록 빠르다', bulletSpeed('easy') < bulletSpeed(
 const rec = (d) => { const q = new Game(); q.setDifficulty(d); q.start(); q.lives = 1; q.score = 10; q.bullets.push({ x: q.player.x, y: PLAYER_Y, vx: 0, vy: 0 }); q.phase = 'play'; q.enemies = [formed()]; run(q, 100); return q.lastRecord; };
 check('기록에 난이도가 담긴다', rec('hard').diff === 'hard' && rec('easy').diff === 'easy');
 
-// 아이템
+// 아이템: 품은 적이 미리 정해져 있고(반짝임), 잡으면 반드시 떨어뜨린다
 check('아이템은 세 종류', ITEM_TYPES.join() === 'rapid,shield,charge');
-const bee = formed();
-const gi = playing([bee], { rng: seq(0.01, 0.4) });
+const stageCarriers = (rngSeq, stage = 1) => { const g = new Game(); g.start(); g.stage = stage; g.startStage(); g.rng = seq(...rngSeq); g.enemies = buildStage(stage); g.assignItems(g.enemies); return g.enemies; };
+check('품을 확률이 안 되면 아무도 안 품는다', stageCarriers([0.5]).every((e) => e.carries === null));
+check('확률이 되면 두 번째 난수로 종류가 정해진다 (이 경우 모두 방어막)', stageCarriers([0.01, 0.4]).every((e) => e.carries === 'shield'));
+check('종류는 난수에 따라 rapid / shield / charge', (() => { const e = stageCarriers([0.01, 0.0])[0], f = stageCarriers([0.01, 0.9])[0]; return e.carries === 'rapid' && f.carries === 'charge'; })());
+check('보너스 물고기는 아이템을 품지 않는다', stageCarriers([0.01, 0.4], 3).every((e) => e.carries === null));
+check('난이도가 낮을수록 품는 적이 많다 (확률 18 / 12 / 8%)', DIFFICULTIES.easy.drop > DIFFICULTIES.normal.drop && DIFFICULTIES.normal.drop > DIFFICULTIES.hard.drop);
+check('새 게임 스테이지에서 실제로 일부 적이 품고 나온다', (() => { let n = 0, x = 12345; const g = new Game({ rng: () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; } }); for (let i = 0; i < 20; i++) { g.stage = 1; g.startStage(); n += g.enemies.filter((e) => e.carries).length; } return n > 40 && n < 160; })());
+
+const bee = formed(); bee.carries = 'shield';
+const gi = playing([bee]);
 gi.hitEnemy(bee);
-check('잡으면 확률적으로 아이템이 떨어진다 (이 경우 방어막)', gi.items.length === 1 && gi.items[0].type === 'shield', JSON.stringify(gi.items));
+check('아이템을 품은 적을 잡으면 반드시 떨어뜨린다 (방어막)', gi.items.length === 1 && gi.items[0].type === 'shield', JSON.stringify(gi.items));
 const y0 = gi.items[0].y; run(gi, 10);
 check('아이템은 천천히 아래로 떨어진다', gi.items.length === 1 && gi.items[0].y > y0);
 gi.items[0].x = gi.player.x; gi.items[0].y = PLAYER_Y;
 run(gi, 1);
 check('잠수함에 닿으면 먹는다', gi.items.length === 0 && gi.player.shield === true && gi.events.includes('pickup'));
-const gm = playing([formed()], { rng: seq(0.5) });
+const gm = playing([formed()]);
 gm.hitEnemy(gm.enemies[0]);
-check('확률이 안 되면 떨어지지 않는다', gm.items.length === 0);
-const gf = playing([], { rng: seq(0.01, 0.4) });
-const fish = new Enemy({ kind: 'fish', slotless: true, bonus: true }); fish.state = 'enter'; fish.y = 100; gf.enemies.push(fish);
-gf.hitEnemy(fish);
-check('보너스 물고기는 아이템을 떨어뜨리지 않는다', gf.items.length === 0);
-const gr = playing([formed()], { rng: seq(0.01, 0.0) });
+check('아무것도 품지 않은 적은 떨어뜨리지 않는다', gm.items.length === 0);
+const gw = playing([formed()]);
+gw.enemies[0].carries = 'charge'; gw.enemies[0].hp = 1;
+gw.kill(gw.enemies[0], true);
+check('해일로 잡아도 품은 아이템은 떨어진다', gw.items.length === 1 && gw.items[0].type === 'charge');
+const gdv = playing([]);
+const dvv = formed('butterfly', 1, 3); dvv.carries = 'rapid'; dvv.state = 'dive'; dvv.hp = 1; gdv.enemies.push(dvv);
+gdv.hitEnemy(dvv);
+check('급강하 중에 잡아도 떨어진다', gdv.items.length === 1 && gdv.items[0].type === 'rapid');
+const gmin = new Game({ rng: seq(0.01, 0.0, 0.5) });
+gmin.start(); gmin.stage = 5; gmin.startStage(); gmin.rng = seq(0.01, 0.0, 0.5);
+gmin.spawnMinion(100, 80);
+check('크라켄이 풀어 놓는 해파리도 아이템을 품을 수 있다', gmin.enemies.length === 1 && gmin.enemies[0].carries === 'rapid');
+const gr = playing([formed()]); gr.enemies[0].carries = 'rapid';
 gr.hitEnemy(gr.enemies[0]);
 gr.items[0].x = gr.player.x; gr.items[0].y = PLAYER_Y; run(gr, 1);
 check('연사 강화를 먹으면 남은 시간이 생긴다', gr.player.rapid > RAPID_TICKS - 5 && gr.player.rapid <= RAPID_TICKS);
-const gc = playing([formed()], { rng: seq(0.01, 0.9) });
+const gc = playing([formed()]); gc.enemies[0].carries = 'charge';
 gc.hitEnemy(gc.enemies[0]);
 const gauge0 = gc.gauge;
 gc.items[0].x = gc.player.x; gc.items[0].y = PLAYER_Y; run(gc, 1);
 check('해일 충전을 먹으면 게이지 +40', gc.gauge === gauge0 + 40, `gauge=${gc.gauge}`);
-const gfall = playing([formed()], { rng: seq(0.01, 0.4) });
+const gfall = playing([formed()]); gfall.enemies[0].carries = 'shield';
 gfall.hitEnemy(gfall.enemies[0]);
 run(gfall, 400);
 check('못 먹은 아이템은 화면 밖에서 사라진다', gfall.items.length === 0);
@@ -105,8 +122,9 @@ check('방어막이 있으면 쌍둥이도 지킨다', gt.player.twin && !gt.pla
 
 // 돌진
 const dashRun = (stage, r) => {
-  const g = new Game({ rng: seq(...r) });
+  const g = new Game();
   g.start(); g.stage = stage; g.startStage();
+  g.rng = seq(...r);
   const e = formed('bee', 3, 4); e.x = 112; e.y = 90;
   g.enemies = [e, anchor()]; g.phase = 'play';
   g.launch();

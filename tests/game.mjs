@@ -146,15 +146,17 @@ gs.hp = 1; gh.hitEnemy(gs);
 check('적 잠수함을 잡으면 100점', gh.score === 400 + 100 || gh.score === 150 + 100);
 
 // 출격
-const gl = new Game({ rng: seq(0.5, 0, 0.1, 0.1) });
+const gl = new Game();
 gl.start();
+gl.rng = seq(0.5, 0, 0.1, 0.1);
 gl.enemies = buildStage(1);
 gl.enemies.forEach((e) => { e.state = 'formation'; });
 gl.phase = 'play'; gl.playTime = 1000; gl.diveTimer = 1;
 run(gl, 1);
 check('대열이 다 모이면 출격한다: 문어는 소용돌이를 펼치러 간다', gl.enemies[0].state === 'beamMove');
-const gl2 = new Game({ rng: seq(0.5, 0, 0.1, 0.1) });
+const gl2 = new Game();
 gl2.start();
+gl2.rng = seq(0.5, 0, 0.1, 0.1);
 gl2.lives = 1;
 gl2.enemies = buildStage(1);
 gl2.enemies.forEach((e) => { e.state = 'formation'; });

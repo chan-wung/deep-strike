@@ -89,20 +89,34 @@ const gu = playing([be]);
 check('게이지가 차기 전에는 못 쓴다', !gu.ultReady && gu.ult() === false);
 gu.gauge = ULT_MAX;
 check('가득 차면 쓸 수 있다', gu.ultReady);
-gu.bullets.push({ x: 50, y: 200, vx: 0, vy: 0 }, { x: 60, y: 100, vx: 0, vy: 0 });
-const butter = formed('butterfly', 1, 4), octo = formed('boss', 0, 4);
-gu.enemies.push(butter, octo);
-check('ult(): 게이지 0, 해일 시작', gu.ult() === true && gu.gauge === 0 && gu.wave && gu.wave.y > 288 - 1);
+gu.bullets.push({ x: 100, y: 200, vx: 0, vy: 0 }, { x: 110, y: 100, vx: 0, vy: 0 }, { x: 30, y: 200, vx: 0, vy: 0 }, { x: 200, y: 100, vx: 0, vy: 0 });
+const butter = formed('butterfly', 1, 4), octo = formed('boss', 0, 4), far = formed('bee', 3, 0);
+gu.enemies.push(butter, octo, far);
+check('ult(): 게이지 0, 해일 시작, 쓴 자리의 x 를 기억', gu.ult() === true && gu.gauge === 0 && gu.wave && gu.wave.y > 288 - 1 && gu.wave.x === gu.player.x);
 check('쓰는 중에는 다시 못 쓴다', (() => { gu.gauge = ULT_MAX; return !gu.ultReady; })());
 gu.gauge = 0;
 run(gu, 25);
-check('해일이 올라오며 아래쪽 탄부터 지운다 (앞면 y=148: 200 은 지워지고 100 은 남는다)', !gu.bullets.some((b) => b.y === 200) && gu.bullets.some((b) => b.y === 100), `front=${gu.wave.y}`);
+check('해일은 기둥 안의 탄만 아래쪽부터 지운다 (앞면 y=148: 200 은 지워지고 100 은 남는다, 바깥 탄은 그대로)', !gu.bullets.some((b) => b.x === 100) && gu.bullets.some((b) => b.x === 110) && gu.bullets.some((b) => b.x === 30) && gu.bullets.some((b) => b.x === 200), `front=${gu.wave.y}`);
 check('해일이 지나는 동안 맞지 않는다', gu.player.invuln > 0);
 run(gu, 60);
-check('해일이 끝나면 사라지고, 일반 적은 모두 잡힌다', gu.wave === null && !gu.enemies.includes(be) && !gu.enemies.includes(butter) && gu.bullets.length === 0);
-check('문어(체력 2)도 해일 한 번에 잡힌다', !gu.enemies.includes(octo));
-check('해일로 잡은 점수는 들어온다', gu.score === 50 + 80 + 150, `score=${gu.score}`);
+check('해일이 끝나면 사라지고, 기둥 안의 체력 1 적은 잡힌다', gu.wave === null && !gu.enemies.includes(be) && !gu.enemies.includes(butter) && !gu.bullets.some((b) => b.x === 110));
+check('문어(체력 2)는 피해 1 로 한 번에 안 죽는다', gu.enemies.includes(octo) && octo.hp === 1);
+check('기둥 바깥의 적과 탄은 무사하다', gu.enemies.includes(far) && gu.bullets.length === 2);
+check('해일로 잡은 점수는 들어온다', gu.score === 50 + 80, `score=${gu.score}`);
 check('해일로 잡은 적은 게이지를 채우지 않는다', gu.gauge === 0);
+
+// 해일과 크라켄: 기둥 안에 있을 때만 피해 10
+const kw = (bossX) => {
+  const g = new Game({ rng: seq(0.5) });
+  g.start(); g.stage = 5; g.startStage(); g.phase = 'play';
+  g.boss.state = 'fight'; g.boss.y = 74; g.boss.x = bossX;
+  g.player.x = 112; g.gauge = ULT_MAX; g.ult();
+  g.boss.step = () => {};          // 보스를 가만히 두고 해일만 본다
+  run(g, 60);
+  return g.boss.hp;
+};
+check('해일은 기둥 안의 크라켄에게 피해 10', kw(112) === 50, `hp=${kw(112)}`);
+check('기둥에서 먼 크라켄은 해일을 맞지 않는다', kw(30) === 60 && kw(200) === 60);
 
 const gg = playing([formed('bee', 3, 4)]);
 gg.player.shots.push({ x: gg.enemies[0].x, y: gg.enemies[0].y + 4.5 });

@@ -40,6 +40,7 @@ export class Enemy {
     this.timer = 0;
     this.beamLen = 0;
     this.speedMul = 1;         // 돌진(dash) 급강하는 더 빠르다
+    this.carries = null;       // 품고 있는 아이템 종류. 화면에서 반짝이고, 잡으면 반드시 떨어뜨린다
   }
 
   get diving() { return DIVING.has(this.state); }

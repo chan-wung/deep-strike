@@ -1,7 +1,7 @@
 import { W, H } from '../game/paths.js';
 import { PLAYER_Y, TWIN_GAP } from '../game/player.js';
 import { BEAM_HALF0, BEAM_SLOPE } from '../game/enemy.js';
-import { ULT_MAX } from '../game/game.js';
+import { ULT_MAX, WAVE_HALF_W } from '../game/game.js';
 import { t } from '../app/i18n.js';
 
 /** 논리 좌표(224×288)를 canvas 에 그릴 때 곱하는 배율 */
@@ -172,7 +172,35 @@ function drawFish(ctx, e, frame) {
   ctx.beginPath(); ctx.arc(-1.2, 2.5, 1, 0, TAU); ctx.arc(1.2, 2.5, 1, 0, TAU); ctx.fill();
 }
 
+/** 아이템을 품은 적: 아이템 색으로 맥동하는 후광과 반짝이는 별 */
+function drawSparkle(ctx, e, frame) {
+  const c = ITEM_STYLE[e.carries][0];
+  const p = 0.5 + 0.5 * Math.sin(frame * 0.18 + e.id);
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.globalAlpha = 0.22 + 0.25 * p;
+  ctx.fillStyle = c;
+  ctx.beginPath(); ctx.arc(0, 0, 10 + p * 2, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = c;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(0, 0, 10, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 3; i++) {
+    const a = frame * 0.05 + i * TAU / 3;
+    const x = Math.cos(a) * 12, y = Math.sin(a) * 12;
+    const sz = 1.2 + (0.5 + 0.5 * Math.sin(frame * 0.3 + i * 2 + e.id)) * 1.8;
+    ctx.beginPath();
+    ctx.moveTo(x - sz, y); ctx.lineTo(x + sz, y);
+    ctx.moveTo(x, y - sz); ctx.lineTo(x, y + sz);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawEnemy(ctx, e, frame) {
+  if (e.carries) drawSparkle(ctx, e, frame);
   ctx.save();
   ctx.translate(e.x, e.y);
   if (e.state === 'enter' || e.state === 'dive' || e.state === 'beamMove' || e.state === 'toSlot') ctx.rotate(e.a - Math.PI / 2);
@@ -246,6 +274,10 @@ function drawKrakenBar(ctx, k) {
 /** 필살기 해일: 바닥에서 위로 올라오는 파도 */
 function drawWave(ctx, w, frame) {
   const y = w.y;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(w.x - WAVE_HALF_W, 0, WAVE_HALF_W * 2, H + 12);   // 쓴 자리의 좁은 기둥만 훑는다
+  ctx.clip();
   const g = ctx.createLinearGradient(0, y, 0, H);
   g.addColorStop(0, 'rgba(120,220,255,.38)');
   g.addColorStop(1, 'rgba(40,140,220,.12)');
@@ -263,6 +295,13 @@ function drawWave(ctx, w, frame) {
     const x = (i * 37 + frame * 3) % W;
     ctx.beginPath(); ctx.arc(x, y - 3 - ((i * 7 + frame) % 9), 1 + (i % 2), 0, TAU); ctx.fill();
   }
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(190,240,255,.45)';                 // 기둥의 양옆 가장자리
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(w.x - WAVE_HALF_W, y); ctx.lineTo(w.x - WAVE_HALF_W, H);
+  ctx.moveTo(w.x + WAVE_HALF_W, y); ctx.lineTo(w.x + WAVE_HALF_W, H);
+  ctx.stroke();
 }
 
 const ITEM_STYLE = { rapid: ['#ffd23f', 'R'], shield: ['#5fe3ff', 'S'], charge: ['#7aa8ff', 'W'] };
