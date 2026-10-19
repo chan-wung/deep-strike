@@ -4,10 +4,18 @@ import { Enemy, KINDS, inBeam } from './enemy.js';
 import { createBoss } from './bosses.js';
 import { Player, PLAYER_Y, TWIN_GAP, RAPID_TICKS } from './player.js';
 import { buildStage, isBonus, isBoss, BONUS_FISH } from './stage.js';
+import { WEAPONS, pickItem, pickWeapon } from './weapons.js';
+import { addRecord, cleanName, emptyBoards, qualifies } from '../app/records.js';
 
 export const TICRATE = 60;
 const START_LIVES = 3;
 const PERFECT_BONUS = 10000;
+/** 엔딩: 이 스테이지(거대 가오리)를 쓰러뜨리면 끝난다. 무한 모드만 계속된다 */
+export const FINAL_STAGE = 15;
+/** 엔딩에서 남은 잠수함 한 대마다 주는 점수 */
+const CLEAR_BONUS_PER_LIFE = 10000;
+/** 엔딩이 나온 뒤 이만큼 지나야 키로 넘길 수 있다 */
+export const ENDING_SKIP = 2 * TICRATE;
 const BOSS_SCORE = 5000;
 /** 필살기(해일): 게이지가 가득 차면 쓴다. 바닥에서 위로 쓸어 올라가며 탄을 지우고 적에게 피해를 준다 */
 export const ULT_MAX = 100;
@@ -19,13 +27,19 @@ export const WAVE_HALF_W = 35;
 const MAX_BULLETS_BOSS = 48;
 const MAX_MINIONS = 6;
 
-/** 난이도: lives 시작 잠수함 수 · bullet 적 탄 속도 배율 · interval 급강하 간격 배율 · divers 동시 급강하 수 가감 · drop 아이템 확률 · bossHp 크라켄 체력 배율 */
+/**
+ * 난이도: lives 시작 잠수함 수 · bullet 적 탄 속도 배율 · interval 급강하 간격 배율 · divers 동시 급강하 수 가감 · drop 아이템 확률 · bossHp 보스 체력 배율
+ * endless 는 15 스테이지에서 끝나지 않고 계속되는 무한 모드 (어려움과 같은 설정). 세 난이도를 모두 깬 뒤에만 고를 수 있다
+ */
 export const DIFFICULTIES = {
   easy: { lives: 4, bullet: 0.85, interval: 1.3, divers: -1, drop: 0.18, bossHp: 0.8 },
   normal: { lives: START_LIVES, bullet: 1, interval: 1, divers: 0, drop: 0.12, bossHp: 1 },
   hard: { lives: START_LIVES, bullet: 1.2, interval: 0.75, divers: 1, drop: 0.08, bossHp: 1.3 },
+  endless: { lives: START_LIVES, bullet: 1.2, interval: 0.75, divers: 1, drop: 0.08, bossHp: 1.3, endless: true },
 };
-export const DIFFICULTY_ORDER = ['easy', 'normal', 'hard'];
+export const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'endless'];
+/** 이 셋을 모두 깨면 무한 모드가 열린다 */
+export const CLEAR_TO_UNLOCK = ['easy', 'normal', 'hard'];
 
 /** 아이템: 적을 잡으면 가끔 떨어진다. rapid 연사 강화 · shield 방어막(한 번 막기) · charge 해일 게이지 +40 */
 export const ITEM_TYPES = ['rapid', 'shield', 'charge'];
@@ -43,7 +57,9 @@ const boxAt = (x, y, hw, hh) => ({ x0: x - hw, x1: x + hw, y0: y - hh, y1: y + h
 /**
  * 게임 규칙 전체. 화면·키보드를 모르므로 node 에서 그대로 테스트할 수 있다.
  * phase: title → ready → play → (dying | captured → ready | over) / (clear | bonusResult → ready)
+ *        마지막 보스(FINAL_STAGE)를 쓰러뜨리면 clear → ending → over
  * lives 는 지금 타는 잠수함까지 센 숫자다 (화면에는 lives - 1 개를 예비로 보여 준다)
+ * 점수판은 모드(쉬움·보통·어려움·무한)마다 따로 있다 (boards). over 에서 점수판에 오를 점수면 naming 이 켜져 이름을 받는다
  */
 export class Game {
   constructor({ rng = Math.random } = {}) {
@@ -51,11 +67,14 @@ export class Game {
     this.player = new Player();
     this.formation = new Formation();
     this.phase = 'title';
-    this.hiScore = 0;
+    this.hiScore = 0;           // 지금 모드의 최고 점수
     this.frame = 0;
     this.paused = false;
-    this.records = [];          // 내 기록 (main 이 저장소에서 읽어 채운다)
+    this.boards = emptyBoards();   // 모드별 내 기록 (main 이 저장소에서 읽어 채운다)
+    this.clears = new Set();       // 엔딩을 본 난이도 (main 이 저장소에서 읽어 채운다)
+    this.naming = false;
     this.rank = null;
+    this.rankMode = null;
     this.difficulty = 'normal';
     this.events = [];           // 효과음용 이벤트 이름. main 이 매 프레임 비운다
     this.shakeT = 0; this.shakeMax = 1; this.shakeMag = 0;
@@ -65,13 +84,25 @@ export class Game {
 
   get cfg() { return DIFFICULTIES[this.difficulty]; }
 
-  /** 타이틀·게임 오버 화면에서만 바꾼다. 다음 새 게임부터 적용 */
+  /** 쉬움·보통·어려움을 모두 깼나 */
+  get endlessUnlocked() { return CLEAR_TO_UNLOCK.every((d) => this.clears.has(d)); }
+  /** 고를 수 있는 모드: 무한은 열린 뒤에만 */
+  get modes() { return this.endlessUnlocked ? DIFFICULTY_ORDER : CLEAR_TO_UNLOCK; }
+  /** 지금 모드의 내 기록 */
+  get records() { return this.boards[this.difficulty]; }
+  syncHi() { this.hiScore = this.records[0]?.score || 0; }
+
+  /** 타이틀·게임 오버 화면에서만 바꾼다 (이름을 쓰는 중에는 안 된다). 다음 새 게임부터 적용 */
   setDifficulty(name) {
-    if (DIFFICULTIES[name] && (this.phase === 'title' || this.phase === 'over')) this.difficulty = name;
+    if (!DIFFICULTIES[name] || this.naming || (this.phase !== 'title' && this.phase !== 'over')) return;
+    if (name === 'endless' && !this.endlessUnlocked) return;
+    this.difficulty = name;
+    this.syncHi();
   }
   cycleDifficulty(step = 1) {
-    const i = DIFFICULTY_ORDER.indexOf(this.difficulty);
-    this.setDifficulty(DIFFICULTY_ORDER[(i + step + DIFFICULTY_ORDER.length) % DIFFICULTY_ORDER.length]);
+    const { modes } = this;
+    const i = Math.max(0, modes.indexOf(this.difficulty));
+    this.setDifficulty(modes[(i + step + modes.length) % modes.length]);
   }
 
   emit(name) { if (this.events.length < 64) this.events.push(name); }
@@ -86,8 +117,12 @@ export class Game {
     this.extraAt = 20000;
     this.gauge = 0;
     this.stats = { shots: 0, hits: 0, bosses: 0 };
-    this.lastRecord = null;     // 게임 오버 때 한 번 만들어지는 기록 (main 이 저장한다)
+    this.lastRecord = null;     // 게임 오버·엔딩 때 한 번 만들어지는 기록 (이름을 받아 submitName 으로 점수판에 넣는다)
     this.rank = null;
+    this.rankMode = null;
+    this.naming = false;
+    this.cleared = false;
+    this.ending = null;
     this.player.reset();
     this.startStage();
   }
@@ -117,8 +152,10 @@ export class Game {
     this.timer = 2 * TICRATE;
   }
 
-  /** title / over 에서 키를 누르면 새 게임 */
+  /** title / over 에서 키를 누르면 새 게임. 엔딩에서는 결과 화면으로. 이름을 쓰는 중에는 아무 일도 없다 */
   start() {
+    if (this.naming) return;
+    if (this.phase === 'ending') { if (this.timer >= ENDING_SKIP) this.enterResults(); return; }
     if (this.phase === 'title' || this.phase === 'over') this.newGame();
   }
 
@@ -127,7 +164,7 @@ export class Game {
   moveTo(x) { this.player.moveTo(x); }
 
   /** 일시정지는 타이틀·게임 오버 화면에서는 의미가 없다 */
-  get canPause() { return this.phase !== 'title' && this.phase !== 'over'; }
+  get canPause() { return this.phase !== 'title' && this.phase !== 'over' && this.phase !== 'ending'; }
   pause() { if (this.canPause) this.paused = true; }
   resume() { this.paused = false; }
   togglePause() { if (this.paused) this.resume(); else this.pause(); }
@@ -186,8 +223,12 @@ export class Game {
       case 'captured': this.capturedTick(); break;
       case 'clear':
         this.moveWorld();
-        if (--this.timer <= 0) { this.stage++; this.startStage(); }
+        if (--this.timer <= 0) {
+          if (this.stage === FINAL_STAGE && !this.cfg.endless) this.allClear();
+          else { this.stage++; this.startStage(); }
+        }
         break;
+      case 'ending': this.timer++; break;
       case 'bonusResult':
         this.moveWorld();
         if (--this.timer <= 0) { this.stage++; this.startStage(); }
@@ -245,7 +286,7 @@ export class Game {
   play() {
     const { player } = this;
     this.playTime++;
-    const fired = player.step(true);
+    const fired = player.step(true, this.homingTargets());
     if (fired) { this.stats.shots += fired; this.emit('shot'); }
     this.moveWorld();
     this.collectItems();
@@ -286,8 +327,16 @@ export class Game {
   assignItems(list) {
     for (const e of list) {
       if (e.kind === 'fish' || this.rng() >= this.cfg.drop) continue;
-      e.carries = ITEM_TYPES[Math.floor(this.rng() * ITEM_TYPES.length)];
+      e.carries = pickItem(this.rng, this.stage, this.difficulty);
     }
+  }
+
+  /** 유도탄이 노릴 수 있는 것들 (유도탄이 날아가고 있을 때만 모은다) */
+  homingTargets() {
+    if (!this.player.shots.some((s) => s.homing)) return [];
+    const out = this.enemies.filter((e) => e.hittable);
+    if (this.boss && this.boss.targetable) out.push(this.boss);
+    return out;
   }
 
   dropItem(x, y, type) {
@@ -302,6 +351,7 @@ export class Game {
       it.taken = true;
       if (it.type === 'rapid') this.player.rapid = RAPID_TICKS;
       else if (it.type === 'shield') this.player.shield = true;
+      else if (WEAPONS.includes(it.type)) this.player.setWeapon(it.type);
       else this.addGauge(CHARGE_AMOUNT);
       this.popup(it.x, it.y - 8, '', `item.${it.type}`);
       this.emit('pickup');
@@ -334,7 +384,15 @@ export class Game {
   /** 크라켄이 n 만큼 맞는다. 쓰러지면 점수·게이지 보상, 풀어 놓은 해파리와 탄은 사라진다 */
   damageBoss(n) {
     const b = this.boss;
-    if (!b.damage(n)) { this.emit('bosshit'); return; }
+    const before = b.phase;
+    if (!b.damage(n)) {
+      if (b.phase > before) {                       // 사나워질 때마다 이 스테이지에 나오는 무기를 하나 떨어뜨린다
+        const weapon = pickWeapon(this.rng, this.stage, this.difficulty);
+        if (weapon) this.dropItem(b.x, b.y + 24, weapon);
+      }
+      this.emit('bosshit');
+      return;
+    }
     this.emit('bossdown');
     this.shake(6, 50);
     const pts = BOSS_SCORE * b.level;
@@ -413,7 +471,8 @@ export class Game {
   shotsVsEnemies() {
     const { player } = this;
     for (const s of player.shots) {
-      const sb = boxAt(s.x, s.y, 1.5, 4);
+      const sb = boxAt(s.x, s.y, 1.5, s.kind === 'laser' ? 9 : 4);
+      if (s.pierce) { this.pierceShot(s, sb); continue; }
       const e = this.enemies.find((en) => en.hittable && overlap(sb, en.rect()));
       if (e) { s.dead = true; this.stats.hits++; this.hitEnemy(e); continue; }
       const b = this.boss;
@@ -422,6 +481,23 @@ export class Game {
       if (c) { s.dead = true; c.carrying = false; this.boom(c.x, c.y - 12); }   // 납치된 잠수함을 직접 쏘면 잃는다
     }
     player.shots = player.shots.filter((s) => !s.dead);
+  }
+
+  /** 레이저: 겹친 적을 모두 맞히되 한 발이 같은 적(보스 포함)은 한 번만. 탄은 사라지지 않는다 */
+  pierceShot(s, sb) {
+    for (const e of [...this.enemies]) {
+      if (!e.hittable || s.hit.has(e.id) || !overlap(sb, e.rect())) continue;
+      s.hit.add(e.id);
+      this.stats.hits++;
+      this.hitEnemy(e);
+    }
+    const b = this.boss;
+    if (b && b.targetable && !s.hit.has(b) && overlap(sb, b.rect())) {
+      s.hit.add(b);
+      this.stats.hits++;
+      this.addGauge(1);
+      this.damageBoss(1);
+    }
   }
 
   hitEnemy(e) {
@@ -548,12 +624,52 @@ export class Game {
     this.timer = 2 * TICRATE;
   }
 
-  /** 게임 오버: 이번 판 기록을 만들어 둔다 (저장은 main 이 한다) */
-  finish() {
-    this.phase = 'over';
+  /** 이번 판 기록을 만들어 둔다. 점수판에는 이름을 받은 뒤 submitName 이 넣는다 */
+  buildRecord(cleared) {
     const { shots, hits, bosses } = this.stats;
-    this.lastRecord = { score: this.score, stage: this.stage, ratio: shots ? Math.round(hits / shots * 100) : 0, bosses, diff: this.difficulty };
+    this.lastRecord = {
+      score: this.score, stage: this.stage, ratio: shots ? Math.min(100, Math.round(hits / shots * 100)) : 0,
+      bosses, diff: this.difficulty, cleared,
+    };
+  }
+
+  /** 결과 화면. 이번 모드 점수판에 오를 점수면 이름을 받는다 */
+  enterResults() {
+    this.phase = 'over';
+    this.naming = qualifies(this.boards[this.difficulty], this.score);
+  }
+
+  /** 게임 오버 */
+  finish() {
+    this.buildRecord(false);
+    this.enterResults();
     this.emit('gameover');
+  }
+
+  /** 마지막 보스를 쓰러뜨렸다: 남은 잠수함 보너스를 주고 이 난이도를 깬 것으로 친다 */
+  allClear() {
+    const bonus = this.lives * CLEAR_BONUS_PER_LIFE;
+    this.addScore(bonus);
+    this.clears.add(this.difficulty);
+    this.cleared = true;
+    this.ending = { bonus };
+    this.buildRecord(true);
+    this.phase = 'ending';
+    this.timer = 0;
+    this.emit('ending');
+  }
+
+  /** 이름을 받아 이번 기록을 점수판에 올린다. date 는 main 이 넘긴다. 올렸으면 true */
+  submitName(name, date = '') {
+    if (!this.naming || !this.lastRecord) return false;
+    const rec = { ...this.lastRecord, name: cleanName(name), date };
+    const { list, rank } = addRecord(this.boards[rec.diff], rec);
+    this.boards[rec.diff] = list;
+    this.rank = rank;
+    this.rankMode = rec.diff;
+    this.lastRecord = rec;
+    this.naming = false;
+    return true;
   }
 
   /** 구출한 잠수함이 옆으로 내려와 붙는 동안 */

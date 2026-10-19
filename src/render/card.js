@@ -37,10 +37,12 @@ export function makeCard(rec) {
   };
 
   label(t('title'), 36, 66, 36, '#ffd23f');
-  label(t('hud.score'), 36, 120, 16, '#9fd8ff');
+  const who = rec.name && rec.name !== '---' ? `${rec.name}  ·  ` : '';
+  label(`${who}${t('hud.score')}`, 36, 120, 16, '#9fd8ff');
   label(String(rec.score), 36, 182, 60, '#ffffff');
   label(`${t('hud.stage', { n: rec.stage })}  ·  ${t('card.ratio')} ${rec.ratio}%  ·  ${t(`diff.${rec.diff || 'normal'}`)}`, 36, 226, 20, '#ffffff');
-  if (rec.bosses > 0) label(t('card.bosses', { n: rec.bosses }), 36, 258, 18, '#ff9fb0');
+  if (rec.cleared) label(`★ ${t('card.allclear')}`, 36, 258, 18, '#ffd23f');
+  else if (rec.bosses > 0) label(t('card.bosses', { n: rec.bosses }), 36, 258, 18, '#ff9fb0');
   if (rec.date) label(rec.date, 36, 292, 14, '#9fd8ff');
 
   ctx.save();

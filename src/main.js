@@ -2,7 +2,7 @@ import { Game, TICRATE, DIFFICULTIES } from './game/game.js';
 import { draw, canvasSize } from './render/render.js';
 import { cardBlob } from './render/card.js';
 import { setLang, getLang, t } from './app/i18n.js';
-import { addRecord, parseRecords, shareText } from './app/records.js';
+import { parseBoards, parseClears, shareText } from './app/records.js';
 import { Sfx } from './app/sound.js';
 import { isTouchDevice, setupTouch } from './ui/touch.js';
 
@@ -10,9 +10,10 @@ const MOVE_KEYS = { ArrowLeft: -1, KeyA: -1, ArrowRight: 1, KeyD: 1 };
 const FIRE_KEYS = new Set(['Space', 'KeyZ', 'ArrowUp', 'KeyW']);
 const ULT_KEYS = new Set(['KeyX', 'KeyB', 'ShiftLeft', 'ShiftRight']);
 const PAUSE_KEYS = new Set(['KeyP', 'Escape']);
-const HI_KEY = 'deepstrike.hi';
 const LANG_KEY = 'deepstrike.lang';
-const REC_KEY = 'deepstrike.records';
+const REC_KEY = 'deepstrike.records';       // 모드별 점수판 (예전 한 배열 형식도 읽는다)
+const CLEARS_KEY = 'deepstrike.clears';     // 엔딩을 본 난이도
+const NAME_KEY = 'deepstrike.name';         // 마지막에 쓴 이름
 const DIFF_KEY = 'deepstrike.diff';
 const MUTE_KEY = 'deepstrike.mute';
 
@@ -22,10 +23,10 @@ const store = {
 };
 
 const game = new Game();
-game.hiScore = Number(store.get(HI_KEY)) || 0;
-game.records = parseRecords(store.get(REC_KEY));
-game.hiScore = Math.max(game.hiScore, game.records[0]?.score || 0);
-if (DIFFICULTIES[store.get(DIFF_KEY)]) game.setDifficulty(store.get(DIFF_KEY));
+game.boards = parseBoards(store.get(REC_KEY));
+parseClears(store.get(CLEARS_KEY)).forEach((d) => game.clears.add(d));
+if (DIFFICULTIES[store.get(DIFF_KEY)]) game.setDifficulty(store.get(DIFF_KEY));   // 클리어 기록을 읽은 뒤에 (무한은 해금돼야 고를 수 있다)
+game.syncHi();
 setLang(store.get(LANG_KEY) || (navigator.language?.startsWith('ko') ? 'ko' : 'en'));
 
 const sfx = new Sfx();
@@ -39,14 +40,19 @@ canvas.height = size.height;
 
 const $ = (id) => document.getElementById(id);
 const langBtn = $('lang'), muteBtn = $('mute'), diffBtn = $('diff'), shareBtn = $('share'), saveBtn = $('save'), ultBtn = $('ult'), toastEl = $('toast');
+const nameForm = $('name'), nameInput = $('nameInput'), nameOk = $('nameOk');
+
+const diffLabel = () => `${t('diff.label')}: ${t(`diff.${game.difficulty}`)}${game.clears.has(game.difficulty) ? ' ★' : ''}`;
 
 /** 언어에 따라 바뀌는 버튼 글자 */
 const showLabels = () => {
   langBtn.textContent = getLang() === 'ko' ? 'EN' : '한';
   shareBtn.textContent = t('btn.share');
   saveBtn.textContent = t('btn.save');
-  diffBtn.textContent = `${t('diff.label')}: ${t(`diff.${game.difficulty}`)}`;
+  diffBtn.textContent = diffLabel();
   muteBtn.textContent = sfx.muted ? '🔇' : '🔊';
+  nameOk.textContent = t('name.ok');
+  nameInput.placeholder = t('name.default');
 };
 showLabels();
 
@@ -89,6 +95,7 @@ const syncKeys = () => {
 };
 
 addEventListener('keydown', (e) => {
+  if (game.naming) return;                                   // 이름을 쓰는 중에는 입력창이 키를 받는다 (타이핑이 게임 키로 새지 않게)
   if (e.code === 'F5' || e.metaKey || e.ctrlKey || e.altKey) return;
   sfx.unlock();                                              // 브라우저 정책상 첫 입력 뒤에야 소리를 낼 수 있다
   const idle = game.phase === 'title' || game.phase === 'over';
@@ -117,16 +124,26 @@ const pauseBtn = $('pause');
 pauseBtn.addEventListener('click', () => { game.togglePause(); pauseBtn.blur(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) game.pause(); });   // 다른 탭으로 가면 자동으로 멈춘다
 
-/** 게임 오버로 만들어진 이번 판 기록을 내 기록에 넣고 저장한다 (판마다 한 번) */
-let handled = null;
-function saveRecord(r) {
-  const rec = { ...r, date: new Date().toISOString().slice(0, 10) };
-  const { list, rank } = addRecord(game.records, rec);
-  game.records = list;
-  game.rank = rank;
-  game.lastRecord = rec;
-  handled = rec;
-  store.set(REC_KEY, JSON.stringify(list));
+/** 이름을 받아 이번 기록을 점수판에 올리고 저장한다 */
+function submitName(raw) {
+  const name = raw.trim() || t('name.default');
+  store.set(NAME_KEY, name);
+  if (game.submitName(name, new Date().toISOString().slice(0, 10))) store.set(REC_KEY, JSON.stringify(game.boards));
+  nameInput.blur();
+}
+nameForm.addEventListener('submit', (e) => { e.preventDefault(); submitName(nameInput.value); });
+nameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); submitName(store.get(NAME_KEY) || ''); }   // Esc: 지난번 이름(없으면 기본 이름)으로 올린다
+});
+
+/** 이름 입력 칸은 점수판에 오르는 결과 화면에서만 보인다 */
+function syncNameForm() {
+  if (game.naming && nameForm.hidden) {
+    nameForm.hidden = false;
+    nameInput.value = store.get(NAME_KEY) || '';
+    nameInput.focus();
+    nameInput.select();
+  } else if (!game.naming && !nameForm.hidden) nameForm.hidden = true;
 }
 
 const shareUrl = () => location.origin + location.pathname;
@@ -159,7 +176,7 @@ async function saveCard() {
 shareBtn.addEventListener('click', () => { shareRecord(); shareBtn.blur(); });
 saveBtn.addEventListener('click', () => { saveCard(); saveBtn.blur(); });
 
-let last = performance.now(), acc = 0, savedHi = game.hiScore;
+let savedClears = game.clears.size;
 function frame(now) {
   acc += Math.min(now - last, 250);       // 탭이 멈췄다 돌아와도 한꺼번에 몰아 돌리지 않게
   last = now;
@@ -169,17 +186,18 @@ function frame(now) {
   for (const name of game.events) sfx.play(name);
   game.events.length = 0;
 
-  if (game.phase === 'over' && game.lastRecord && game.lastRecord !== handled) saveRecord(game.lastRecord);
-  if (game.hiScore !== savedHi && game.phase !== 'play') { savedHi = game.hiScore; store.set(HI_KEY, String(savedHi)); }
+  if (game.clears.size !== savedClears) { savedClears = game.clears.size; store.set(CLEARS_KEY, JSON.stringify([...game.clears])); }
+  syncNameForm();
 
-  const idle = game.phase === 'title' || game.phase === 'over';
+  const idle = (game.phase === 'title' || game.phase === 'over') && !game.naming;
   diffBtn.hidden = !idle;
-  shareBtn.hidden = saveBtn.hidden = !(game.phase === 'over' && game.lastRecord);
+  shareBtn.hidden = saveBtn.hidden = !(game.phase === 'over' && game.lastRecord && !game.naming);
   ultBtn.classList.toggle('ready', game.gaugeFull && !game.bonus);
-  if (diffBtn.textContent !== `${t('diff.label')}: ${t(`diff.${game.difficulty}`)}`) showLabels();
+  if (diffBtn.textContent !== diffLabel()) showLabels();
 
   draw(ctx, game);
   requestAnimationFrame(frame);
 }
+let last = performance.now(), acc = 0;
 requestAnimationFrame(frame);
 window.__game = game;     // 개발 중 콘솔에서 상태 확인용

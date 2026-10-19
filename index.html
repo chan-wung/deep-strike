@@ -21,6 +21,10 @@
     /* 터치: 필살기(해일) 버튼. 게이지가 차면 켜진다 */
     #ult { position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: max(26px, env(safe-area-inset-bottom)); width: 64px; height: 64px; border-radius: 50%; font-size: 28px; padding: 0; opacity: .35; touch-action: none; -webkit-tap-highlight-color: transparent; }
     #ult.ready { opacity: 1; background: #0891b2; box-shadow: 0 0 14px #67e8f9; }
+    /* 점수판에 오르면 이름을 받는 칸 (게임 오버·엔딩 결과 화면에서만) */
+    #name { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 6px; }
+    #name[hidden] { display: none; }
+    #nameInput { width: 150px; font: 16px sans-serif; padding: 5px 8px; border: 2px solid #67e8f9; border-radius: 4px; background: #02101e; color: #fff; outline: none; user-select: text; -webkit-user-select: text; }
     #toast { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); padding: 6px 14px; font: 14px sans-serif; color: #fff; background: rgba(2, 16, 30, .85); border-radius: 6px; pointer-events: none; opacity: 0; transition: opacity .2s; }
     #toast.show { opacity: 1; }
   </style>
@@ -34,6 +38,10 @@
   <button id="share" type="button" hidden></button>
   <button id="save" type="button" hidden></button>
   <button id="ult" type="button" aria-label="Tidal wave" hidden>🌊</button>
+  <form id="name" hidden autocomplete="off">
+    <input id="nameInput" type="text" maxlength="8" enterkeyhint="done" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button id="nameOk" type="submit"></button>
+  </form>
   <div id="toast" role="status"></div>
   <script type="module" src="/src/main.js"></script>
 </body>

@@ -1,7 +1,8 @@
 import { W, H } from '../game/paths.js';
 import { PLAYER_Y, TWIN_GAP } from '../game/player.js';
 import { BEAM_HALF0, BEAM_SLOPE } from '../game/enemy.js';
-import { ULT_MAX, WAVE_HALF_W } from '../game/game.js';
+import { ULT_MAX, WAVE_HALF_W, ENDING_SKIP } from '../game/game.js';
+import { WEAPON_TICKS } from '../game/weapons.js';
 import { t } from '../app/i18n.js';
 
 /** 논리 좌표(224×288)를 canvas 에 그릴 때 곱하는 배율 */
@@ -480,7 +481,10 @@ function drawWave(ctx, w, frame) {
   ctx.stroke();
 }
 
-const ITEM_STYLE = { rapid: ['#ffd23f', 'R'], shield: ['#5fe3ff', 'S'], charge: ['#7aa8ff', 'W'] };
+const ITEM_STYLE = {
+  rapid: ['#ffd23f', 'R'], shield: ['#5fe3ff', 'S'], charge: ['#7aa8ff', 'W'],
+  spread: ['#ff9f43', 'V'], laser: ['#ff6fb5', 'L'], homing: ['#6fe38f', 'H'],
+};
 
 function drawItem(ctx, it, frame) {
   const [c, glyph] = ITEM_STYLE[it.type];
@@ -544,10 +548,34 @@ function drawPlayer(ctx, game) {
 function drawShots(ctx, game) {
   const rapid = game.player.rapid > 0;
   for (const s of game.player.shots) {
-    ctx.fillStyle = rapid ? '#fff1a8' : '#fff';
-    ctx.beginPath(); ctx.roundRect(s.x - 1.2, s.y - 4, 2.4, 8, 1.2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.4)';
-    ctx.beginPath(); ctx.arc(s.x, s.y + 7, 1.2, 0, TAU); ctx.fill();
+    if (s.kind === 'laser') {                          // 레이저: 길게 뻗은 분홍 광선에 흰 심지
+      ctx.fillStyle = 'rgba(255,111,181,.35)';
+      ctx.fillRect(s.x - 3, s.y - 12, 6, 24);
+      ctx.fillStyle = '#ff6fb5';
+      ctx.fillRect(s.x - 1.4, s.y - 12, 2.8, 24);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(s.x - 0.6, s.y - 12, 1.2, 24);
+    } else if (s.kind === 'spread') {                  // 확산: 가는 방향으로 기운 주황 탄
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(Math.atan2(s.vy, s.vx) + Math.PI / 2);
+      ctx.fillStyle = '#ffb561';
+      ctx.beginPath(); ctx.roundRect(-1.3, -4, 2.6, 8, 1.3); ctx.fill();
+      ctx.restore();
+    } else if (s.kind === 'homing') {                  // 유도: 초록 구슬과 꼬리
+      ctx.fillStyle = 'rgba(111,227,143,.35)';
+      ctx.beginPath(); ctx.arc(s.x - s.vx * 2, s.y - s.vy * 2, 2.2, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(s.x - s.vx, s.y - s.vy, 2.8, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#6fe38f';
+      ctx.beginPath(); ctx.arc(s.x, s.y, 3, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#eafff0';
+      ctx.beginPath(); ctx.arc(s.x - 0.6, s.y - 0.6, 1, 0, TAU); ctx.fill();
+    } else {
+      ctx.fillStyle = rapid ? '#fff1a8' : '#fff';
+      ctx.beginPath(); ctx.roundRect(s.x - 1.2, s.y - 4, 2.4, 8, 1.2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.4)';
+      ctx.beginPath(); ctx.arc(s.x, s.y + 7, 1.2, 0, TAU); ctx.fill();
+    }
   }
   for (const b of game.bullets) {
     ctx.fillStyle = COLOR.ink;
@@ -579,20 +607,57 @@ function drawHud(ctx, game) {
   for (let i = 0; i < Math.min(game.lives - 1, 5); i++) drawSub(ctx, 14 + i * 16, H - 10, COLOR.sub, COLOR.subDark, 0);
   text(ctx, t('hud.stage', { n: game.stage }), W - 8, H - 6, 9, COLOR.accent, 'right');
   if (!game.bonus) drawGauge(ctx, game);
+  drawWeapon(ctx, game.player, game.frame);
 }
 
-/** 내 기록 상위 5개. 이번 판 순위(rank)는 강조한다 */
+/** 새 무기를 쓰는 동안: 이름과 남은 시간 막대 (끝나 가면 깜빡) */
+function drawWeapon(ctx, player, frame) {
+  if (player.weaponT <= 0 || player.weapon === 'torpedo') return;
+  if (player.weaponT < 180 && (frame >> 3) % 2) return;
+  const c = ITEM_STYLE[player.weapon][0];
+  text(ctx, t(`weapon.${player.weapon}`), 8, H - 28, 8, c);
+  ctx.fillStyle = 'rgba(0,0,0,.5)';
+  ctx.fillRect(8, H - 25, 44, 4);
+  ctx.fillStyle = c;
+  ctx.fillRect(9, H - 24, 42 * player.weaponT / WEAPON_TICKS, 2);
+}
+
+/** 지금 모드의 내 기록 상위 5개 (순위 · 이름 · 점수 · 스테이지 · 클리어 ★). 이번 판 순위(rank)는 강조한다 */
 function drawRecords(ctx, game, y0) {
-  shadowText(ctx, t('records'), W / 2, y0, 9, COLOR.accent);
-  const rows = game.records.slice(0, 5);
-  rows.forEach((r, i) => {
-    const y = y0 + 14 + i * 12, color = game.rank === i + 1 ? COLOR.accent : COLOR.text;
-    shadowText(ctx, String(i + 1), 40, y, 9, color, 'left');
-    shadowText(ctx, String(r.score), 58, y, 9, color, 'left');
-    shadowText(ctx, `S${r.stage}`, 128, y, 9, color, 'left');
-    shadowText(ctx, `${r.ratio}%`, 164, y, 9, color, 'left');
-    shadowText(ctx, (r.diff || 'normal')[0].toUpperCase(), 196, y, 9, '#9fd8ff', 'left');
+  shadowText(ctx, `${t('records')} · ${t(`diff.${game.difficulty}`)}`, W / 2, y0, 9, COLOR.accent);
+  const mine = game.rankMode === game.difficulty ? game.rank : null;
+  game.records.slice(0, 5).forEach((r, i) => {
+    const y = y0 + 14 + i * 12, color = mine === i + 1 ? COLOR.accent : COLOR.text;
+    shadowText(ctx, String(i + 1), 18, y, 9, color, 'left');
+    shadowText(ctx, r.name, 32, y, 9, color, 'left');
+    shadowText(ctx, String(r.score), 160, y, 9, color, 'right');
+    shadowText(ctx, `S${r.stage}`, 168, y, 9, '#9fd8ff', 'left');
+    if (r.cleared) shadowText(ctx, '★', 204, y, 9, COLOR.accent, 'left');
   });
+}
+
+/** 엔딩: 이야기가 한 줄씩 떠오르고, 남은 잠수함 보너스를 보여 준 뒤 키를 기다린다 */
+function drawEnding(ctx, game) {
+  const cx = W / 2, T = game.timer;
+  ctx.fillStyle = 'rgba(2,16,30,.78)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = Math.min(1, T / 40);
+  shadowText(ctx, t('msg.allclear'), cx, 58, 16, COLOR.accent);
+  const lines = t('ending.story');
+  lines.forEach((s, i) => {
+    const a = Math.min(1, (T - 50 - i * 100) / 40);
+    if (a <= 0) return;
+    ctx.globalAlpha = a;
+    shadowText(ctx, s, cx, 98 + i * 18, 8, COLOR.text);
+  });
+  const bonusAt = 50 + lines.length * 100;
+  if (T > bonusAt) {
+    ctx.globalAlpha = Math.min(1, (T - bonusAt) / 40);
+    shadowText(ctx, t('ending.bonus', { n: game.ending?.bonus ?? 0 }), cx, 196, 10, '#9ff');
+  }
+  ctx.globalAlpha = 1;
+  drawSub(ctx, cx, 224 + Math.sin(T * 0.05) * 3, COLOR.sub, COLOR.subDark, T);
+  if (T >= ENDING_SKIP && (game.frame >> 5) % 2 === 0) shadowText(ctx, t('ending.continue'), cx, 254, 8, COLOR.text);
 }
 
 function drawOverlay(ctx, game) {
@@ -604,8 +669,12 @@ function drawOverlay(ctx, game) {
     shadowText(ctx, t('title'), cx, 80, 22, COLOR.accent);
     shadowText(ctx, t('title.sub'), cx, 102, 8, COLOR.text);
     ctx.save(); ctx.translate(cx, 138); ctx.scale(2.2, 2.2); drawSub(ctx, 0, Math.sin(game.frame * 0.05) * 2, COLOR.sub, COLOR.subDark, game.frame); ctx.restore();
-    shadowText(ctx, `◀ ${t('diff.label')}: ${t(`diff.${game.difficulty}`)} ▶`, cx, 184, 10, '#9ff');
+    const star = game.clears.has(game.difficulty) ? ' ★' : '';
+    shadowText(ctx, `◀ ${t('diff.label')}: ${t(`diff.${game.difficulty}`)}${star} ▶`, cx, 184, 10, '#9ff');
+    if (game.hiScore > 0) shadowText(ctx, t('title.best', { n: game.hiScore }), cx, 198, 8, '#9fd8ff');
     if ((game.frame >> 5) % 2 === 0) shadowText(ctx, t('title.start'), cx, 212, 10, COLOR.text);
+    if (game.endlessUnlocked) shadowText(ctx, t('title.unlocked'), cx, 226, 8, COLOR.accent);
+    else shadowText(ctx, t('title.unlock'), cx, 226, 7, '#9fd8ff');
     shadowText(ctx, t('title.controls'), cx, 238, 8, '#9fd8ff');
     shadowText(ctx, t('title.touch'), cx, 252, 8, '#9fd8ff');
   } else if (phase === 'ready') {
@@ -628,16 +697,22 @@ function drawOverlay(ctx, game) {
     ctx.fillStyle = 'rgba(2,16,30,.72)';
     ctx.fillRect(0, 0, W, H);
     const { shots, hits } = game.stats;
-    shadowText(ctx, t('msg.over'), cx, 62, 20, '#ff7a7a');
+    if (game.cleared) shadowText(ctx, t('msg.allclear'), cx, 62, 16, COLOR.accent);
+    else shadowText(ctx, t('msg.over'), cx, 62, 20, '#ff7a7a');
     shadowText(ctx, `${t('hud.score')} ${game.score}`, cx, 86, 12, COLOR.text);
-    shadowText(ctx, t('over.ratio', { n: shots ? Math.round(hits / shots * 100) : 0 }), cx, 102, 9, COLOR.accent);
+    shadowText(ctx, t('over.ratio', { n: shots ? Math.min(100, Math.round(hits / shots * 100)) : 0 }), cx, 102, 9, COLOR.accent);
     shadowText(ctx, `${t('over.shots', { n: shots })} · ${t('over.hits', { n: hits })}`, cx, 116, 8, '#9fd8ff');
-    if (game.rank && (game.frame >> 4) % 2 === 0) {
+    if (game.naming) shadowText(ctx, t('name.prompt'), cx, 136, 8, '#9ff');
+    else if (game.rank && game.rankMode === game.difficulty && (game.frame >> 4) % 2 === 0) {
       shadowText(ctx, game.rank === 1 ? t('over.record.best') : t('over.record.rank', { n: game.rank }), cx, 136, 11, '#9ff');
     }
     drawRecords(ctx, game, 156);
-    shadowText(ctx, `◀ ${t(`diff.${game.difficulty}`)} ▶`, cx, 236, 9, '#9fd8ff');
-    if ((game.frame >> 5) % 2 === 0) shadowText(ctx, t('msg.over.again'), cx, 252, 9, COLOR.text);
+    if (!game.naming) {                       // 이름을 쓰는 동안에는 아래쪽을 입력 칸이 쓴다
+      shadowText(ctx, `◀ ${t(`diff.${game.difficulty}`)}${game.clears.has(game.difficulty) ? ' ★' : ''} ▶`, cx, 236, 9, '#9fd8ff');
+      if ((game.frame >> 5) % 2 === 0) shadowText(ctx, t('msg.over.again'), cx, 252, 9, COLOR.text);
+    }
+  } else if (phase === 'ending') {
+    drawEnding(ctx, game);
   }
   if (game.paused) {
     ctx.fillStyle = 'rgba(2,16,30,.65)';
@@ -669,7 +744,7 @@ export function draw(ctx, game) {
   if (phase !== 'title') {
     for (const it of game.items) drawItem(ctx, it, frame);
     if (game.boss && game.boss.kind === 'angler') drawDarkness(ctx, game);
-    if (phase !== 'dying' && phase !== 'captured' && phase !== 'over') drawPlayer(ctx, game);
+    if (phase !== 'dying' && phase !== 'captured' && phase !== 'over' && phase !== 'ending') drawPlayer(ctx, game);
     if (game.capture) {
       const c = game.capture;
       ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.a); drawSub(ctx, 0, 0, COLOR.captive, '#992222', frame); ctx.restore();

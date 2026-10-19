@@ -25,7 +25,7 @@ check('기본 난이도는 보통', gd.difficulty === 'normal' && gd.cfg === DIF
 gd.cycleDifficulty(1);
 check('난이도 돌리기: 보통 → 어려움 → 쉬움 → 보통', gd.difficulty === 'hard' && (gd.cycleDifficulty(1), gd.difficulty === 'easy') && (gd.cycleDifficulty(1), gd.difficulty === 'normal'));
 gd.cycleDifficulty(-1);
-check('거꾸로도 돈다', gd.difficulty === 'easy' && DIFFICULTY_ORDER.join() === 'easy,normal,hard');
+check('거꾸로도 돈다', gd.difficulty === 'easy' && DIFFICULTY_ORDER.join() === 'easy,normal,hard,endless' && gd.modes.join() === 'easy,normal,hard');
 gd.start();
 check('쉬움: 잠수함 4대로 시작', gd.lives === 4);
 gd.setDifficulty('hard');

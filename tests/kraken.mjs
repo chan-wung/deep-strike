@@ -151,6 +151,8 @@ go.lives = 1; go.score = 1234; go.stage = 4; go.stats = { shots: 10, hits: 6, bo
 go.bullets.push({ x: go.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(go, 100);
 check('게임 오버가 되면 기록이 만들어진다', go.phase === 'over' && go.lastRecord && go.lastRecord.score === 1234 && go.lastRecord.stage === 4 && go.lastRecord.ratio === 60 && go.lastRecord.bosses === 1, JSON.stringify(go.lastRecord));
+check('점수판에 오를 점수면 이름을 받는 중이고, 그동안 새 게임은 시작되지 않는다', go.naming === true && (go.start(), go.phase === 'over'));
+go.submitName('A', '2026-01-01');
 go.start();
 check('새 게임에서는 기록이 비워지고 내 기록 목록은 유지', go.lastRecord === null && go.rank === null && Array.isArray(go.records));
 done();
