@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Deep Strike</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #02101e; }
+    body { display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+    #game { display: block; width: 100vw; height: 100vh; object-fit: contain; }
+    #pause { position: fixed; top: 8px; left: 8px; padding: 4px 10px; font: 14px sans-serif; color: #fff; background: #0c4a6e; border: 0; border-radius: 4px; cursor: pointer; }
+    #lang { position: fixed; top: 8px; right: 8px; padding: 4px 10px; font: 14px sans-serif; color: #fff; background: #0c4a6e; border: 0; border-radius: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <button id="pause" type="button" aria-label="Pause">⏸</button>
+  <button id="lang" type="button">EN</button>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
