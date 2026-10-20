@@ -31,6 +31,12 @@ const BOSS_COLOR = {
   manta: ['#2fae8f', '#e0a526', '#e5484d'],
 };
 
+/** 터치 기기면 키보드 안내 대신 터치 안내를 보여 준다 (main.js 가 켠다) */
+let touchUI = false;
+export const setTouchUI = (on) => { touchUI = on; };
+/** 터치 기기에서는 터치용 문구(키.touch)를 쓴다 */
+const tt = (key) => t(touchUI ? `${key}.touch` : key);
+
 export function canvasSize() {
   return { width: W * S, height: H * S };
 }
@@ -701,7 +707,7 @@ function drawEnding(ctx, game) {
   }
   ctx.globalAlpha = 1;
   drawSub(ctx, cx, 224 + Math.sin(T * 0.05) * 3, COLOR.sub, COLOR.subDark, T);
-  if (T >= ENDING_SKIP && (game.frame >> 5) % 2 === 0) shadowText(ctx, t('ending.continue'), cx, 254, 8, COLOR.text);
+  if (T >= ENDING_SKIP && (game.frame >> 5) % 2 === 0) shadowText(ctx, tt('ending.continue'), cx, 254, 8, COLOR.text);
 }
 
 function drawOverlay(ctx, game) {
@@ -716,11 +722,14 @@ function drawOverlay(ctx, game) {
     const star = game.clears.has(game.difficulty) ? ' ★' : '';
     shadowText(ctx, `◀ ${t('diff.label')}: ${t(`diff.${game.difficulty}`)}${star} ▶`, cx, 184, 10, '#9ff');
     if (game.hiScore > 0) shadowText(ctx, t('title.best', { n: game.hiScore }), cx, 198, 8, '#9fd8ff');
-    if ((game.frame >> 5) % 2 === 0) shadowText(ctx, t('title.start'), cx, 212, 10, COLOR.text);
+    if ((game.frame >> 5) % 2 === 0) shadowText(ctx, tt('title.start'), cx, 212, 10, COLOR.text);
     if (game.endlessUnlocked) shadowText(ctx, t('title.unlocked'), cx, 226, 8, COLOR.accent);
     else shadowText(ctx, t('title.unlock'), cx, 226, 7, '#9fd8ff');
-    shadowText(ctx, t('title.controls'), cx, 238, 8, '#9fd8ff');
-    shadowText(ctx, t('title.touch'), cx, 252, 8, '#9fd8ff');
+    if (touchUI) shadowText(ctx, t('title.touch'), cx, 245, 8, '#9fd8ff');
+    else {
+      shadowText(ctx, t('title.controls'), cx, 238, 8, '#9fd8ff');
+      shadowText(ctx, t('title.touch'), cx, 252, 8, '#9fd8ff');
+    }
     shadowText(ctx, t(`hint.captive.${game.cfg.captive}`), cx, 268, 7, COLOR.accent);
   } else if (phase === 'ready') {
     if (game.readyKind === 'ready') shadowText(ctx, t('msg.ready'), cx, 150, 16, COLOR.accent);
@@ -757,7 +766,7 @@ function drawOverlay(ctx, game) {
     drawRecords(ctx, game, 156);
     if (!game.naming) {                       // 이름을 쓰는 동안에는 아래쪽을 입력 칸이 쓴다
       shadowText(ctx, `◀ ${t(`diff.${game.difficulty}`)}${game.clears.has(game.difficulty) ? ' ★' : ''} ▶`, cx, 236, 9, '#9fd8ff');
-      if (game.timer >= OVER_LOCK && (game.frame >> 5) % 2 === 0) shadowText(ctx, t('msg.over.again'), cx, 252, 9, COLOR.text);
+      if (game.timer >= OVER_LOCK && (game.frame >> 5) % 2 === 0) shadowText(ctx, tt('msg.over.again'), cx, 252, 9, COLOR.text);
     }
   } else if (phase === 'ending') {
     drawEnding(ctx, game);
