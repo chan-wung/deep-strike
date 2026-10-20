@@ -1,5 +1,5 @@
 import { Game, TICRATE, DIFFICULTIES } from './game/game.js';
-import { draw, canvasSize } from './render/render.js';
+import { draw, canvasSize, setTouchUI } from './render/render.js';
 import { cardBlob } from './render/card.js';
 import { setLang, getLang, t } from './app/i18n.js';
 import { parseBoards, parseClears, shareText } from './app/records.js';
@@ -85,7 +85,10 @@ function cycleDifficulty(step = 1) {
 }
 diffBtn.addEventListener('click', () => { cycleDifficulty(1); diffBtn.blur(); });
 
-if (isTouchDevice()) setupTouch(game, canvas);
+if (isTouchDevice()) {
+  setupTouch(game, canvas);
+  setTouchUI(true);
+}
 
 const moveHeld = new Set(), fireHeld = new Set();
 const syncKeys = () => {
