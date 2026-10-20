@@ -7,6 +7,7 @@ export default {
   'title.start.touch': '화면을 터치해 시작',
   'msg.over.again.touch': '화면을 터치해 다시 하기',
   'ending.continue.touch': '화면을 터치해 결과 보기',
+  'msg.rotate': '휴대폰을 세로로 돌려 주세요',
   'hud.score': '점수',
   'hud.hi': '최고 점수',
   'hud.stage': '{n} 스테이지',
