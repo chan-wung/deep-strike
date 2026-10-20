@@ -26,7 +26,7 @@ export function setupTouch(game, canvas, root = document.body) {
   }
 
   root.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#lang, #pause, #mute, #ult, #share, #save, #diff, #name')) return;
+    if (e.target.closest('#lang, #pause, #mute, #ult, #share, #save, #diff, #name, #rotate')) return;
     if (game.paused) { game.resume(); return; }          // 멈춘 화면은 아무 곳이나 터치하면 계속
     game.start();
     origin = { x: e.clientX, px: game.player.x, id: e.pointerId };

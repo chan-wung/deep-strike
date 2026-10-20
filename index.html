@@ -27,6 +27,11 @@
     #nameInput { width: 150px; font: 16px sans-serif; padding: 5px 8px; border: 2px solid #67e8f9; border-radius: 4px; background: #02101e; color: #fff; outline: none; user-select: text; -webkit-user-select: text; }
     #toast { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); padding: 6px 14px; font: 14px sans-serif; color: #fff; background: rgba(2, 16, 30, .85); border-radius: 6px; pointer-events: none; opacity: 0; transition: opacity .2s; }
     #toast.show { opacity: 1; }
+    /* 휴대폰을 가로로 돌렸을 때만 화면 전체를 덮는다 (게임은 세로 화면용) */
+    #rotate { display: none; position: fixed; inset: 0; z-index: 10; align-items: center; justify-content: center; padding: 16px; font: bold 18px sans-serif; color: #ffd23f; text-align: center; background: #02101e; }
+    @media (orientation: landscape) and (max-height: 500px) {
+      body.touch #rotate { display: flex; }
+    }
   </style>
 </head>
 <body>
@@ -43,6 +48,7 @@
     <button id="nameOk" type="submit"></button>
   </form>
   <div id="toast" role="status"></div>
+  <div id="rotate" role="alert"></div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

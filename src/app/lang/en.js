@@ -7,6 +7,7 @@ export default {
   'title.start.touch': 'Tap the screen to start',
   'msg.over.again.touch': 'Tap the screen to play again',
   'ending.continue.touch': 'Tap the screen for results',
+  'msg.rotate': 'Please rotate your phone to portrait',
   'hud.score': 'SCORE',
   'hud.hi': 'HIGH SCORE',
   'hud.stage': 'STAGE {n}',

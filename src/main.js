@@ -54,6 +54,7 @@ const showLabels = () => {
   document.documentElement.lang = getLang();
   nameOk.textContent = t('name.ok');
   nameInput.placeholder = t('name.default');
+  $('rotate').textContent = t('msg.rotate');
 };
 showLabels();
 
@@ -88,6 +89,13 @@ diffBtn.addEventListener('click', () => { cycleDifficulty(1); diffBtn.blur(); })
 if (isTouchDevice()) {
   setupTouch(game, canvas);
   setTouchUI(true);
+  // 웹에서는 화면 회전을 막을 수 없어서, 휴대폰을 가로로 돌리면 게임을 멈추고 세로로 돌려 달라는 화면을 띄운다 (index.html 의 #rotate)
+  const landscape = matchMedia('(orientation: landscape) and (max-height: 500px)');
+  const onRotate = () => { if (landscape.matches) game.pause(); };
+  landscape.addEventListener('change', onRotate);
+  onRotate();
+  // 전체 화면·홈 화면 앱처럼 허락되는 환경에서는 세로로 고정해 본다 (일반 브라우저 탭에서는 실패하고 넘어간다)
+  addEventListener('pointerdown', () => screen.orientation?.lock?.('portrait').catch(() => {}), { once: true });
 }
 
 const moveHeld = new Set(), fireHeld = new Set();
