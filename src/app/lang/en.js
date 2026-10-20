@@ -34,6 +34,7 @@ export default {
   'records': 'MY RECORDS',
   'btn.share': 'Share',
   'btn.save': 'Save image',
+  'msg.savefail': 'Could not create the image',
   'msg.copied': 'Copied to clipboard',
   'share.text': 'Score {score} · Stage {stage} · Hit {ratio}%',
   'item.rapid': 'RAPID FIRE!',

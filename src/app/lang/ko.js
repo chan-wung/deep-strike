@@ -35,6 +35,7 @@ export default {
   'btn.share': '공유',
   'btn.save': '이미지 저장',
   'msg.copied': '클립보드에 복사했어요',
+  'msg.savefail': '이미지를 만들지 못했어요',
   'share.text': '점수 {score} · {stage} 스테이지 · 명중률 {ratio}%',
   'item.rapid': '연사 강화!',
   'item.shield': '방어막!',

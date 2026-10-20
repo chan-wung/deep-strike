@@ -1,7 +1,7 @@
 import { W, H } from '../game/paths.js';
 import { PLAYER_Y, TWIN_GAP } from '../game/player.js';
 import { BEAM_HALF0, BEAM_SLOPE } from '../game/enemy.js';
-import { ULT_MAX, WAVE_HALF_W, ENDING_SKIP } from '../game/game.js';
+import { ULT_MAX, WAVE_HALF_W, ENDING_SKIP, OVER_LOCK } from '../game/game.js';
 import { WEAPON_TICKS } from '../game/weapons.js';
 import { TAU } from '../game/geom.js';
 import { t } from '../app/i18n.js';
@@ -757,7 +757,7 @@ function drawOverlay(ctx, game) {
     drawRecords(ctx, game, 156);
     if (!game.naming) {                       // 이름을 쓰는 동안에는 아래쪽을 입력 칸이 쓴다
       shadowText(ctx, `◀ ${t(`diff.${game.difficulty}`)}${game.clears.has(game.difficulty) ? ' ★' : ''} ▶`, cx, 236, 9, '#9fd8ff');
-      if ((game.frame >> 5) % 2 === 0) shadowText(ctx, t('msg.over.again'), cx, 252, 9, COLOR.text);
+      if (game.timer >= OVER_LOCK && (game.frame >> 5) % 2 === 0) shadowText(ctx, t('msg.over.again'), cx, 252, 9, COLOR.text);
     }
   } else if (phase === 'ending') {
     drawEnding(ctx, game);

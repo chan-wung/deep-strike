@@ -85,6 +85,7 @@ g6b.lives = 1;
 g6b.bullets.push({ x: g6b.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(g6b, 100);
 check('마지막 잠수함을 잃으면 게임 오버', g6b.phase === 'over');
+for (let i = 0; i < 60; i++) g6b.tick();
 g6b.start();
 check('게임 오버에서 키를 누르면 새 게임', g6b.phase === 'ready' && g6b.lives === 3 && g6b.score === 0);
 

@@ -153,6 +153,7 @@ run(go, 100);
 check('게임 오버가 되면 기록이 만들어진다', go.phase === 'over' && go.lastRecord && go.lastRecord.score === 1234 && go.lastRecord.stage === 4 && go.lastRecord.ratio === 60 && go.lastRecord.bosses === 1, JSON.stringify(go.lastRecord));
 check('점수판에 오를 점수면 이름을 받는 중이고, 그동안 새 게임은 시작되지 않는다', go.naming === true && (go.start(), go.phase === 'over'));
 go.submitName('A', '2026-01-01');
+for (let i = 0; i < 60; i++) go.tick();     // 결과 화면이 잠깐 지난 뒤에야 다시 시작한다
 go.start();
 check('새 게임에서는 기록이 비워지고 내 기록 목록은 유지', go.lastRecord === null && go.rank === null && Array.isArray(go.records));
 

@@ -51,6 +51,7 @@ const showLabels = () => {
   saveBtn.textContent = t('btn.save');
   diffBtn.textContent = diffLabel();
   muteBtn.textContent = sfx.muted ? '🔇' : '🔊';
+  document.documentElement.lang = getLang();
   nameOk.textContent = t('name.ok');
   nameInput.placeholder = t('name.default');
 };
@@ -152,9 +153,9 @@ async function shareRecord() {
   if (!rec) return;
   const text = shareText(rec, shareUrl());
   try {
-    const blob = await cardBlob(rec);
-    const file = new File([blob], 'deep-strike.png', { type: 'image/png' });
-    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], text }); return; }
+    const blob = await cardBlob(rec);      // 카드를 못 만들면(null) 글만 공유한다
+    const file = blob && new File([blob], 'deep-strike.png', { type: 'image/png' });
+    if (file && navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], text }); return; }
     if (navigator.share) { await navigator.share({ text }); return; }
   } catch (err) {
     if (err?.name === 'AbortError') return;                  // 사용자가 공유 창을 닫았다
@@ -165,7 +166,8 @@ async function shareRecord() {
 async function saveCard() {
   const rec = game.lastRecord;
   if (!rec) return;
-  const blob = await cardBlob(rec);
+  const blob = await cardBlob(rec).catch(() => null);
+  if (!blob) { toast(t('msg.savefail')); return; }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `deep-strike-${rec.score}.png`;

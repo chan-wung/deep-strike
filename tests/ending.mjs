@@ -38,6 +38,7 @@ check('이름을 쓰는 동안은 모드를 못 바꾼다', (() => { g.cycleDiff
 check('이름을 내면 이번 모드 점수판에 오른다', g.submitName('  Kim  ', '2026-02-02') && g.naming === false && g.records[0].name === 'Kim' && g.records[0].cleared === true && g.rank === 1 && g.rankMode === 'normal');
 check('다른 모드 점수판은 그대로', g.boards.easy.length === 0 && g.boards.hard.length === 0);
 check('두 번 내도 한 번만 올라간다', g.submitName('X') === false && g.records.length === 1);
+for (let i = 0; i < 60; i++) g.tick();
 g.start();
 check('이름을 낸 뒤 키를 누르면 새 게임', g.phase === 'ready' && g.stage === 1 && g.cleared === false);
 

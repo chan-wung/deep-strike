@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const suites = ['i18n', 'records', 'paths', 'formation', 'player', 'enemy', 'stages', 'kraken', 'extras', 'weapons', 'ending', 'game'];
+const suites = ['i18n', 'records', 'paths', 'formation', 'player', 'enemy', 'stages', 'kraken', 'extras', 'weapons', 'ending', 'game', 'regress'];
 let failed = 0;
 for (const name of suites) {
   const r = spawnSync(process.execPath, [fileURLToPath(new URL(`./${name}.mjs`, import.meta.url))], { encoding: 'utf8', timeout: 60000 });

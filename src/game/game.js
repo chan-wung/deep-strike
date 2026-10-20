@@ -5,7 +5,7 @@ import { Enemy, KINDS, inBeam } from './enemy.js';
 import { createBoss } from './bosses.js';
 import { Player, PLAYER_Y, TWIN_GAP, RAPID_TICKS, UPGRADE_MAX } from './player.js';
 import { buildStage, isBonus, isBoss, BONUS_FISH } from './stage.js';
-import { WEAPONS, UPGRADES, pickItem, pickWeapon } from './weapons.js';
+import { WEAPONS, UPGRADES, WEAPON_DEF, pickItem, pickWeapon } from './weapons.js';
 import { addRecord, cleanName, emptyBoards, qualifies, MODES } from '../app/records.js';
 
 export const TICRATE = 60;
@@ -27,6 +27,10 @@ const WAVE_BOSS_DAMAGE = 10;
 export const WAVE_HALF_W = 35;
 const MAX_BULLETS_BOSS = 48;
 const MAX_MINIONS = 6;
+/** 게임 오버 결과 화면이 나온 뒤 이만큼 지나야 키로 다시 시작한다 (연타하다 결과를 못 보는 일을 막는다) */
+export const OVER_LOCK = TICRATE;
+/** 잠수함을 잃고 되살아난 뒤(준비 연출이 끝난 직후) 맞지 않는 시간 */
+const RESPAWN_INVULN = 90;
 
 /**
  * 난이도: lives 시작 잠수함 수 · bullet 적 탄 속도 배율 · interval 급강하 간격 배율 · divers 동시 급강하 수 가감 · drop 아이템 확률 · bossHp 보스 체력 배율
@@ -110,7 +114,7 @@ export class Game {
 
   /** 타이틀·게임 오버 화면에서만 바꾼다 (이름을 쓰는 중에는 안 된다). 다음 새 게임부터 적용 */
   setDifficulty(name) {
-    if (!DIFFICULTIES[name] || this.naming || !this.idle) return;
+    if (!Object.hasOwn(DIFFICULTIES, name) || this.naming || !this.idle) return;
     if (name === 'endless' && !this.endlessUnlocked) return;
     this.difficulty = name;
     this.syncHi();
@@ -172,6 +176,7 @@ export class Game {
   start() {
     if (this.naming) return;
     if (this.phase === 'ending') { if (this.timer >= ENDING_SKIP) this.enterResults(); return; }
+    if (this.phase === 'over' && this.timer < OVER_LOCK) return;
     if (this.idle) this.newGame();
   }
 
@@ -229,22 +234,28 @@ export class Game {
       case 'ready':
         this.moveWorld();
         this.player.step(false);
-        if (--this.timer <= 0) this.phase = 'play';
+        if (--this.timer <= 0) {
+          this.phase = 'play';
+          if (this.readyKind === 'ready') this.player.invuln = RESPAWN_INVULN;   // 되살아난 직후 보스의 돌진 따위에 곧바로 또 죽지 않게
+        }
         break;
       case 'play': this.play(); break;
       case 'dying':
         this.moveWorld();
+        this.player.moveShots();
         if (--this.timer <= 0) this.loseShip();
         break;
       case 'captured': this.capturedTick(); break;
       case 'clear':
         this.moveWorld();
+        this.player.moveShots();
         if (--this.timer <= 0) {
           if (this.stage === FINAL_STAGE && !this.cfg.endless) this.allClear();
           else { this.stage++; this.startStage(); }
         }
         break;
       case 'ending': this.timer++; break;
+      case 'over': this.timer++; break;
       case 'bonusResult':
         this.moveWorld();
         if (--this.timer <= 0) { this.stage++; this.startStage(); }
@@ -302,7 +313,7 @@ export class Game {
     const { player } = this;
     this.playTime++;
     const fired = player.step(true, this.homingTargets());
-    if (fired) { this.stats.shots += fired; this.emit('shot'); }
+    if (fired) { this.stats.shots += fired * WEAPON_DEF[player.weapon].shots; this.emit('shot'); }   // 확산탄은 알갱이 하나하나를 센다
     this.moveWorld();
     this.collectItems();
     if (this.boss) this.boss.step(this.makeEnv());
@@ -403,6 +414,7 @@ export class Game {
   /** 크라켄이 n 만큼 맞는다. 쓰러지면 점수·게이지 보상, 풀어 놓은 해파리와 탄은 사라진다 */
   damageBoss(n) {
     const b = this.boss;
+    if (!b.targetable) return;                      // 쓰러지는 중인 보스는 더 맞지 않는다
     const before = b.phase;
     if (!b.damage(n)) {
       if (b.phase > before) {                       // 사나워질 때마다 이 스테이지에 나오는 무기를 하나 떨어뜨린다
@@ -488,13 +500,13 @@ export class Game {
       if (s.pierce) { this.pierceShot(s, sb); continue; }
       const e = this.enemies.find((en) => en.hittable && overlap(sb, en.rect()));
       if (e) {
-        s.dead = true; this.stats.hits++; this.hitEnemy(e);
+        s.dead = true; this.countHit(s); this.hitEnemy(e);
         if (s.blast) this.explode(s.x, s.y, e, false);
         continue;
       }
       const b = this.boss;
       if (b && b.targetable && overlap(sb, b.rect())) {
-        s.dead = true; this.hitBoss();
+        s.dead = true; this.countHit(s); this.hitBoss();
         if (s.blast) this.explode(s.x, s.y, null, true);
         continue;
       }
@@ -509,12 +521,13 @@ export class Game {
     for (const e of [...this.enemies]) {
       if (!e.hittable || s.hit.has(e.id) || !overlap(sb, e.rect())) continue;
       s.hit.add(e.id);
-      this.stats.hits++;
+      this.countHit(s);
       this.hitEnemy(e);
     }
     const b = this.boss;
     if (b && b.targetable && !s.hit.has(b) && overlap(sb, b.rect())) {
       s.hit.add(b);
+      this.countHit(s);
       this.hitBoss();
     }
   }
@@ -525,16 +538,21 @@ export class Game {
     this.boom(x, y);
     for (const e of [...this.enemies]) {
       if (e === first || !e.hittable || !overlap(area, e.rect())) continue;
-      this.stats.hits++;
       this.hitEnemy(e);
     }
     const b = this.boss;
     if (!bossHit && b && b.targetable && overlap(area, b.rect())) this.hitBoss();
   }
 
-  /** 어뢰 한 발이 보스에 맞았다 */
-  hitBoss() {
+  /** 쏜 한 발은 몇 명을 맞혀도 명중 한 번으로만 센다 (관통·폭발이 명중률을 부풀리지 않게) */
+  countHit(s) {
+    if (s.counted) return;
+    s.counted = true;
     this.stats.hits++;
+  }
+
+  /** 어뢰 한 발이 보스에 맞았다 (명중 수는 호출한 쪽이 countHit 로 센다) */
+  hitBoss() {
     this.addGauge(1);
     this.damageBoss(1);
   }
@@ -688,6 +706,7 @@ export class Game {
   /** 결과 화면. 이번 모드 점수판에 오를 점수면 이름을 받는다 */
   enterResults() {
     this.phase = 'over';
+    this.timer = 0;
     this.naming = qualifies(this.boards[this.difficulty], this.score);
   }
 

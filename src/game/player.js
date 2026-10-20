@@ -104,18 +104,8 @@ export class Player {
     s.vy = Math.sin(ang) * sp;
   }
 
-  /** 한 틱. canFire 가 false 면 움직이기만 한다. targets 는 유도탄이 노릴 {x, y} 목록. 쏜 수를 돌려준다 */
-  step(canFire = true, targets = []) {
-    const speed = this.speed;
-    if (this.move) this.x += this.move * speed;
-    else if (this.target !== null) {
-      const dx = this.target - this.x;
-      this.x += Math.max(-speed * 1.8, Math.min(speed * 1.8, dx));
-    }
-    this.x = Math.max(8, Math.min(this.maxX, this.x));
-    if (this.invuln > 0) this.invuln--;
-    if (this.rapid > 0) this.rapid--;
-    if (this.weaponT > 0 && --this.weaponT === 0) this.weapon = 'torpedo';
+  /** 날아가는 어뢰를 한 틱 움직인다 (클리어·사망 연출 중에도 허공에 멈추지 않게 따로 부른다) */
+  moveShots(targets = []) {
     for (const s of this.shots) {
       if (s.vy === undefined) { s.y -= this.shotSpeed; continue; }
       if (s.homing) this.steer(s, targets);
@@ -128,6 +118,21 @@ export class Player {
       }
     }
     this.shots = this.shots.filter((s) => s.y > -8 && s.x > -8 && s.x < W + 8 && !s.dead);
+  }
+
+  /** 한 틱. canFire 가 false 면 움직이기만 한다. targets 는 유도탄이 노릴 {x, y} 목록. 쏜 수를 돌려준다 */
+  step(canFire = true, targets = []) {
+    const speed = this.speed;
+    if (this.move) this.x += this.move * speed;
+    else if (this.target !== null) {
+      const dx = this.target - this.x;
+      this.x += Math.max(-speed * 1.8, Math.min(speed * 1.8, dx));
+    }
+    this.x = Math.max(8, Math.min(this.maxX, this.x));
+    if (this.invuln > 0) this.invuln--;
+    if (this.rapid > 0) this.rapid--;
+    if (this.weaponT > 0 && --this.weaponT === 0) this.weapon = 'torpedo';
+    this.moveShots(targets);
     if (this.cooldown > 0) this.cooldown--;
     if (canFire && this.firing && this.cooldown <= 0) {
       const n = this.tryFire();
