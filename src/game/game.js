@@ -3,9 +3,9 @@ import { TAU, overlap, boxAt } from './geom.js';
 import { Formation } from './formation.js';
 import { Enemy, KINDS, inBeam } from './enemy.js';
 import { createBoss } from './bosses.js';
-import { Player, PLAYER_Y, TWIN_GAP, RAPID_TICKS } from './player.js';
+import { Player, PLAYER_Y, TWIN_GAP, RAPID_TICKS, UPGRADE_MAX } from './player.js';
 import { buildStage, isBonus, isBoss, BONUS_FISH } from './stage.js';
-import { WEAPONS, pickItem, pickWeapon } from './weapons.js';
+import { WEAPONS, UPGRADES, pickItem, pickWeapon } from './weapons.js';
 import { addRecord, cleanName, emptyBoards, qualifies, MODES } from '../app/records.js';
 
 export const TICRATE = 60;
@@ -47,6 +47,10 @@ export const CLEAR_TO_UNLOCK = ['easy', 'normal', 'hard'];
 /** 아이템: 적을 잡으면 가끔 떨어진다. rapid 연사 강화 · shield 방어막(한 번 막기) · charge 해일 게이지 +40 */
 export const ITEM_TYPES = ['rapid', 'shield', 'charge'];
 const ITEM_FALL = 1.1;
+/** 폭발 어뢰가 터지는 반경 */
+const BLAST_RADIUS = 18;
+/** 영구 강화를 이미 최대로 올렸을 때 아이템을 먹으면 받는 점수 */
+const MAXED_UPGRADE_SCORE = 1000;
 const CHARGE_AMOUNT = 40;
 /** 돌진 급강하가 나오기 시작하는 스테이지 */
 const DASH_FROM = 4;
@@ -363,6 +367,10 @@ export class Game {
       if (it.type === 'rapid') this.player.rapid = RAPID_TICKS;
       else if (it.type === 'shield') this.player.shield = true;
       else if (WEAPONS.includes(it.type)) this.player.setWeapon(it.type);
+      else if (UPGRADES.includes(it.type)) {
+        if (this.player[it.type] < UPGRADE_MAX) this.player[it.type]++;
+        else this.addScore(MAXED_UPGRADE_SCORE);
+      }
       else this.addGauge(CHARGE_AMOUNT);
       this.popup(it.x, it.y - 8, '', `item.${it.type}`);
       this.emit('pickup');
@@ -476,12 +484,20 @@ export class Game {
   shotsVsEnemies() {
     const { player } = this;
     for (const s of player.shots) {
-      const sb = boxAt(s.x, s.y, 1.5, s.kind === 'laser' ? 9 : 4);
+      const sb = boxAt(s.x, s.y, s.w ?? 1.5, s.kind === 'laser' ? 9 : 4);
       if (s.pierce) { this.pierceShot(s, sb); continue; }
       const e = this.enemies.find((en) => en.hittable && overlap(sb, en.rect()));
-      if (e) { s.dead = true; this.stats.hits++; this.hitEnemy(e); continue; }
+      if (e) {
+        s.dead = true; this.stats.hits++; this.hitEnemy(e);
+        if (s.blast) this.explode(s.x, s.y, e, false);
+        continue;
+      }
       const b = this.boss;
-      if (b && b.targetable && overlap(sb, b.rect())) { s.dead = true; this.hitBoss(); continue; }
+      if (b && b.targetable && overlap(sb, b.rect())) {
+        s.dead = true; this.hitBoss();
+        if (s.blast) this.explode(s.x, s.y, null, true);
+        continue;
+      }
       const c = this.enemies.find((en) => en.carrying && overlap(sb, boxAt(en.x, en.y - 12, 6, 6)));
       if (c) { s.dead = true; if (this.cfg.captive !== 'free') this.loseCaptive(c); }   // 납치된 잠수함을 직접 쏘면 잃는다 (쉬움은 탄만 사라진다)
     }
@@ -501,6 +517,19 @@ export class Game {
       s.hit.add(b);
       this.hitBoss();
     }
+  }
+
+  /** 폭발 어뢰가 터진다: 반경 안의 적(맞은 적 first 는 빼고)을 모두 맞히고, 보스는 직접 맞지 않았으면 한 번만 맞는다 */
+  explode(x, y, first, bossHit) {
+    const area = boxAt(x, y, BLAST_RADIUS, BLAST_RADIUS);
+    this.boom(x, y);
+    for (const e of [...this.enemies]) {
+      if (e === first || !e.hittable || !overlap(area, e.rect())) continue;
+      this.stats.hits++;
+      this.hitEnemy(e);
+    }
+    const b = this.boss;
+    if (!bossHit && b && b.targetable && overlap(area, b.rect())) this.hitBoss();
   }
 
   /** 어뢰 한 발이 보스에 맞았다 */

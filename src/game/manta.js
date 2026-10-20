@@ -34,7 +34,8 @@ export class Manta extends Boss {
 
   fight(env) {
     const p = this.phase;
-    this.x = W / 2 + Math.sin(this.t * [0.018, 0.024, 0.032][p - 1]) * 68;
+    this.swing += [0.018, 0.024, 0.032][p - 1];
+    this.x = W / 2 + Math.sin(this.swing) * 68;
     this.y = 70 + Math.sin(this.t * 0.045) * 8;
     const sp = 1.25 + 0.05 * this.level;
     if (--this.cd <= 0) {

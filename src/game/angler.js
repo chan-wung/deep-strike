@@ -40,7 +40,9 @@ export class Angler extends Boss {
   fight(env) {
     const p = this.phase;
     if (!this.lunge) {
-      this.x = W / 2 + Math.sin(this.t * 0.01 * (1 + 0.4 * (p - 1))) * 64;
+      this.swing += 0.01 * (1 + 0.4 * (p - 1));
+      const home = W / 2 + Math.sin(this.swing) * 64;
+      this.x += Math.max(-1.6, Math.min(1.6, home - this.x));            // 돌진에서 돌아온 뒤에도 순간이동하지 않고 다가간다
       this.y = BOSS_HOME_Y + Math.sin(this.t * 0.05) * 3;
       if (--this.lungeCd <= 0) { this.lungeCd = [420, 340, 260][p - 1]; this.lunge = { dir: 1 }; }
     } else {

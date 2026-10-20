@@ -24,6 +24,7 @@ export class Boss {
     this.t = 0;
     this.flash = 0;
     this.timer = 0;
+    this.swing = 0;          // 좌우 흔들림의 위상. 속도(단계)가 바뀌어도 위치가 튀지 않게 누적해 쓴다
     this.dead = false;
     this.halfW = halfW; this.up = up; this.down = down;
   }

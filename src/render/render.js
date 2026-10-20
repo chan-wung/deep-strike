@@ -494,6 +494,8 @@ function drawWave(ctx, w, frame) {
 const ITEM_STYLE = {
   rapid: ['#ffd23f', 'R'], shield: ['#5fe3ff', 'S'], charge: ['#7aa8ff', 'W'],
   spread: ['#ff9f43', 'V'], laser: ['#ff6fb5', 'L'], homing: ['#6fe38f', 'H'],
+  blast: ['#ff7a3d', 'B'], sonic: ['#8fe8ff', 'N'],
+  boost: ['#c9a6ff', 'P'], velo: ['#ffe98a', 'T'], reload: ['#ffa6c9', 'F'],
 };
 
 function drawItem(ctx, it, frame) {
@@ -547,11 +549,20 @@ function drawPlayer(ctx, game) {
   }
   drawSub(ctx, player.x, PLAYER_Y, COLOR.sub, COLOR.subDark, frame);
   if (player.twin) drawSub(ctx, player.x + TWIN_GAP, PLAYER_Y, COLOR.sub, COLOR.subDark, frame);
+  [player.boost, player.velo, player.reload].forEach((lv, row) => {                          // 영구 강화 단계: 잠수함 아래 점
+    for (let i = 0; i < lv; i++) {
+      ctx.fillStyle = ITEM_STYLE[['boost', 'velo', 'reload'][row]][0];
+      ctx.fillRect(player.x - 5 + i * 4, PLAYER_Y + 9 + row * 2.5, 3, 1.6);
+    }
+  });
   if (player.shield || protectedByWave) {                                                    // 방어막(해일 중에도 보호됨)
-    ctx.strokeStyle = protectedByWave ? 'rgba(200,245,255,.8)' : `rgba(95,227,255,${0.55 + 0.25 * Math.sin(frame * 0.2)})`;
-    ctx.fillStyle = 'rgba(95,227,255,.12)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(cx, PLAYER_Y, r + 1, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = protectedByWave ? 'rgba(200,245,255,.8)' : `rgba(95,227,255,${0.8 + 0.2 * Math.sin(frame * 0.2)})`;
+    ctx.fillStyle = 'rgba(95,227,255,.22)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, PLAYER_Y, r + 3, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.7)';                                                // 방울의 반짝이는 하이라이트
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, PLAYER_Y, r, Math.PI * 1.1, Math.PI * 1.45); ctx.stroke();
   }
 }
 
@@ -580,6 +591,23 @@ function drawShots(ctx, game) {
       ctx.beginPath(); ctx.arc(s.x, s.y, 3, 0, TAU); ctx.fill();
       ctx.fillStyle = '#eafff0';
       ctx.beginPath(); ctx.arc(s.x - 0.6, s.y - 0.6, 1, 0, TAU); ctx.fill();
+    } else if (s.kind === 'blast') {                   // 폭발 어뢰: 붉은 주황 탄두
+      ctx.fillStyle = 'rgba(255,120,60,.35)';
+      ctx.beginPath(); ctx.arc(s.x, s.y + 3, 4.2, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#ff7a3d';
+      ctx.beginPath(); ctx.roundRect(s.x - 2, s.y - 5, 4, 10, 2); ctx.fill();
+      ctx.fillStyle = '#fff2c0';
+      ctx.beginPath(); ctx.arc(s.x, s.y - 3, 1.2, 0, TAU); ctx.fill();
+    } else if (s.kind === 'sonic') {                   // 음파 링: 위로 휜 파란 호, 날아갈수록 넓어지고 흐려진다
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, s.life / 12);
+      ctx.strokeStyle = '#8fe8ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, s.w, s.w * 0.45, 0, Math.PI, TAU); ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath(); ctx.ellipse(s.x, s.y + 3, s.w * 0.7, s.w * 0.3, 0, Math.PI, TAU); ctx.stroke();
+      ctx.restore();
     } else {
       ctx.fillStyle = rapid ? '#fff1a8' : '#fff';
       ctx.beginPath(); ctx.roundRect(s.x - 1.2, s.y - 4, 2.4, 8, 1.2); ctx.fill();
@@ -618,6 +646,12 @@ function drawHud(ctx, game) {
   text(ctx, t('hud.stage', { n: game.stage }), W - 8, H - 6, 9, COLOR.accent, 'right');
   if (!game.bonus) drawGauge(ctx, game);
   drawWeapon(ctx, game.player, game.frame);
+  if (game.player.shield) {                                                   // 방어막이 남아 있다는 표시 (한 번 맞으면 사라진다)
+    const c = ITEM_STYLE.shield[0];
+    ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(11, H - 40, 4, 0, TAU); ctx.stroke();
+    text(ctx, t('hud.shield'), 19, H - 37, 8, c);
+  }
 }
 
 /** 새 무기를 쓰는 동안: 이름과 남은 시간 막대 (끝나 가면 깜빡) */

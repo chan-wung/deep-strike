@@ -155,4 +155,18 @@ check('점수판에 오를 점수면 이름을 받는 중이고, 그동안 새 �
 go.submitName('A', '2026-01-01');
 go.start();
 check('새 게임에서는 기록이 비워지고 내 기록 목록은 유지', go.lastRecord === null && go.rank === null && Array.isArray(go.records));
+
+// 단계가 바뀌어도 보스가 순간이동하지 않는다
+const kc = new Kraken(5); kc.state = 'fight'; kc.y = KRAKEN_Y; kc.t = 400;
+const ec = stubEnv();
+let jump = 0, prevX = null;
+for (let i = 0; i < 900; i++) {
+  if (i === 300) kc.hp = Math.floor(kc.maxHp * 0.6);
+  if (i === 600) kc.hp = Math.floor(kc.maxHp * 0.3);
+  kc.step(ec);
+  if (prevX !== null) jump = Math.max(jump, Math.abs(kc.x - prevX));
+  prevX = kc.x;
+}
+check('크라켄은 단계가 바뀌어도 한 틱에 2px 넘게 튀지 않는다', jump < 2, `max=${jump}`);
+
 done();

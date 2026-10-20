@@ -5,7 +5,7 @@
  *  homing : 가까운 적을 향해 휘어 간다
  * 어떤 아이템이 언제 나오는지(스테이지·난이도별 분배)도 여기서 정한다.
  */
-export const WEAPONS = ['spread', 'laser', 'homing'];
+export const WEAPONS = ['spread', 'laser', 'homing', 'blast', 'sonic'];
 export const WEAPON_TICKS = 900;
 
 /** 무기 모양: shots 는 한 기체가 한 번에 쏘는 발 수, angles 는 위쪽(-π/2) 기준 벌어짐 */
@@ -14,10 +14,15 @@ export const WEAPON_DEF = {
   spread: { shots: 3, angles: [-0.26, 0, 0.26], speed: 4.2, cooldown: 8 },
   laser: { shots: 1, angles: [0], speed: 8, cooldown: 9, pierce: true },
   homing: { shots: 1, angles: [0], speed: 3.4, cooldown: 9, homing: true },
+  blast: { shots: 1, angles: [0], speed: 3.8, cooldown: 10, blast: true },
+  sonic: { shots: 1, angles: [0], speed: 3, cooldown: 12, pierce: true, life: 30, w0: 4 },
 };
 
+/** 영구 강화 아이템: 먹을 때마다 한 단계씩 (최대 UPGRADE_MAX), 잠수함을 잃으면 사라진다 */
+export const UPGRADES = ['boost', 'velo', 'reload'];
+
 /** 무기가 처음 나오는 스테이지 (보통 기준) */
-export const WEAPON_FROM = { spread: 2, laser: 4, homing: 7 };
+export const WEAPON_FROM = { spread: 2, laser: 4, homing: 7, blast: 5, sonic: 9 };
 /** 난이도에 따라 무기가 나오는 시점이 앞서거나 늦는다 */
 const FROM_SHIFT = { easy: -1, normal: 0, hard: 1 };
 FROM_SHIFT.endless = FROM_SHIFT.hard;                // 무한은 어려움과 같다
@@ -27,9 +32,9 @@ FROM_SHIFT.endless = FROM_SHIFT.hard;                // 무한은 어려움과 �
  * 보통의 앞 세 개(rapid·shield·charge)는 무기가 없던 때와 같은 3:3:2 다.
  */
 export const ITEM_WEIGHTS = {
-  easy: { rapid: 3, shield: 4, charge: 2, spread: 3, laser: 2, homing: 3 },
-  normal: { rapid: 3, shield: 3, charge: 2, spread: 3, laser: 2, homing: 2 },
-  hard: { rapid: 3, shield: 2, charge: 3, spread: 2, laser: 3, homing: 1 },
+  easy: { rapid: 3, shield: 4, charge: 2, spread: 3, laser: 2, homing: 3, blast: 2, sonic: 2, boost: 2, velo: 2, reload: 2 },
+  normal: { rapid: 3, shield: 3, charge: 2, spread: 3, laser: 2, homing: 2, blast: 2, sonic: 2, boost: 1, velo: 1, reload: 1 },
+  hard: { rapid: 3, shield: 2, charge: 3, spread: 2, laser: 3, homing: 1, blast: 2, sonic: 1, boost: 1, velo: 1, reload: 1 },
 };
 ITEM_WEIGHTS.endless = ITEM_WEIGHTS.hard;            // 무한은 어려움과 같다
 

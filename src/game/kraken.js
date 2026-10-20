@@ -22,7 +22,8 @@ export class Kraken extends Boss {
 
   fight(env) {
     const p = this.phase;
-    this.x = W / 2 + Math.sin(this.t * [0.012, 0.017, 0.024][p - 1]) * 70;
+    this.swing += [0.012, 0.017, 0.024][p - 1];
+    this.x = W / 2 + Math.sin(this.swing) * 70;
     this.y = KRAKEN_Y + Math.sin(this.t * 0.05) * 4;
     const sp = Math.min(1.4 + 0.06 * this.level, 2.4) + (p === 3 ? 0.2 : 0);
     if (--this.cd <= 0) {
