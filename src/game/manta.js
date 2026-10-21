@@ -8,6 +8,23 @@ export const CURTAIN_GAP = 2;
 const SLOT_W = 24.5;
 export const curtainX = (i) => 14 + i * SLOT_W;
 
+/** 지난번 틈(prev)과 두 칸 이상 떨어진 새 틈 */
+function nextGap(rand, prev) {
+  const max = CURTAIN_SLOTS - CURTAIN_GAP;           // 0 ~ 7
+  let g = Math.floor(rand() * (max + 1));
+  if (Math.abs(g - prev) < 2) g = (g + 4) % (max + 1);
+  return g;
+}
+
+/** 새 틈(boss.gapAt)을 고르고, 틈만 빼고 y 에서 speed 로 한 줄 내려보낸다 */
+export function shootCurtain(boss, env, y, speed) {
+  boss.gapAt = nextGap(env.rand, boss.gapAt);
+  for (let i = 0; i < CURTAIN_SLOTS; i++) {
+    if (i >= boss.gapAt && i < boss.gapAt + CURTAIN_GAP) continue;
+    env.shoot(curtainX(i), y, Math.PI / 2, speed);
+  }
+}
+
 /**
  * 15 스테이지의 거대 가오리. 먹물 장막의 빈틈으로 빠져나가며 싸운다.
  *   1단계: 느린 장막
@@ -15,21 +32,13 @@ export const curtainX = (i) => 14 + i * SLOT_W;
  *   3단계: 빠른 장막 + 조준탄 + 폭탄 복어를 떨어뜨린다
  */
 export class Manta extends Boss {
-  constructor(stage, hpMul = 1) {
-    super(stage, hpMul, { kind: 'manta', nameKey: 'boss.manta', halfW: 42, up: 18, down: 20 });
+  constructor(stage) {
+    super(stage, { kind: 'manta', nameKey: 'boss.manta', halfW: 42, up: 18, down: 20 });
     this.cd = 80;
     this.aimCd = 90;
     this.mineCd = 260;
     this.gapAt = 3;
     this.volley = 0;
-  }
-
-  /** 지난번 틈과 두 칸 이상 떨어진 새 틈 */
-  nextGap(rand) {
-    const max = CURTAIN_SLOTS - CURTAIN_GAP;           // 0 ~ 7
-    let g = Math.floor(rand() * (max + 1));
-    if (Math.abs(g - this.gapAt) < 2) g = (g + 4) % (max + 1);
-    return g;
   }
 
   fight(env) {
@@ -41,11 +50,7 @@ export class Manta extends Boss {
     if (--this.cd <= 0) {
       this.cd = [150, 120, 95][p - 1];
       this.volley++;
-      this.gapAt = this.nextGap(env.rand);
-      for (let i = 0; i < CURTAIN_SLOTS; i++) {
-        if (i >= this.gapAt && i < this.gapAt + CURTAIN_GAP) continue;
-        env.shoot(curtainX(i), this.y + 20, Math.PI / 2, sp);
-      }
+      shootCurtain(this, env, this.y + 20, sp);
     }
     if (p >= 2 && --this.aimCd <= 0) {
       this.aimCd = p === 2 ? 100 : 70;

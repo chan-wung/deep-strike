@@ -12,8 +12,8 @@ export const KRAKEN_Y = BOSS_HOME_Y;
  *   3단계: 빙글 도는 먹물 고리와 빠른 조준탄, 해파리를 더 자주
  */
 export class Kraken extends Boss {
-  constructor(stage, hpMul = 1) {
-    super(stage, hpMul, { kind: 'kraken', nameKey: 'boss.kraken', halfW: 30, up: 28, down: 24 });
+  constructor(stage) {
+    super(stage, { kind: 'kraken', nameKey: 'boss.kraken', halfW: 30, up: 28, down: 24 });
     this.cd = 60;
     this.spawnCd = 300;
     this.volley = 0;

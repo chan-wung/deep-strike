@@ -1,4 +1,5 @@
 import { t } from '../app/i18n.js';
+import { NO_NAME } from '../app/records.js';
 import { drawSub, FONT } from './render.js';
 
 const CW = 600, CH = 315;
@@ -36,7 +37,7 @@ export function makeCard(rec) {
   };
 
   label(t('title'), 36, 66, 36, '#ffd23f');
-  const who = rec.name && rec.name !== '---' ? `${rec.name}  ·  ` : '';
+  const who = rec.name && rec.name !== NO_NAME ? `${rec.name}  ·  ` : '';
   label(`${who}${t('hud.score')}`, 36, 120, 16, '#9fd8ff');
   label(String(rec.score), 36, 182, 60, '#ffffff');
   label(`${t('hud.stage', { n: rec.stage })}  ·  ${t('card.ratio')} ${rec.ratio}%`, 36, 226, 20, '#ffffff');

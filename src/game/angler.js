@@ -3,7 +3,7 @@ import { PLAYER_Y } from './player.js';
 import { Boss, BOSS_HOME_Y } from './boss.js';
 import { TAU } from './geom.js';
 
-export const LUNGE_DEPTH = 232;
+export { LUNGE_DEPTH } from './boss.js';
 /** 화면이 어두워지는 시간(틱) */
 export const DARK_LEN = 210;
 
@@ -14,11 +14,10 @@ export const DARK_LEN = 210;
  *   3단계: 먹물 고리와 조준탄, 돌진이 잦고 암전이 길다
  */
 export class Angler extends Boss {
-  constructor(stage, hpMul = 1) {
-    super(stage, hpMul, { kind: 'angler', nameKey: 'boss.angler', halfW: 34, up: 26, down: 26 });
+  constructor(stage) {
+    super(stage, { kind: 'angler', nameKey: 'boss.angler', halfW: 34, up: 26, down: 26 });
     this.cd = 70;
     this.lungeCd = 360;
-    this.lunge = null;          // { dir: 1 내려감 · -1 올라감 }
     this.darkCd = 300;
     this.darkT = 0;             // 0 이면 밝다, 1 이상이면 암전 중 (경과 틱)
     this.volley = 0;
@@ -34,26 +33,16 @@ export class Angler extends Boss {
     return Math.max(0, Math.min(1, this.darkT / 30, (DARK_LEN - this.darkT) / 30));
   }
 
-  /** 입을 벌리고 돌진하는 중에만 몸에 닿으면 맞는다 */
-  contact(r) { return this.state === 'fight' && !!this.lunge && this.overlaps(r); }
-
   fight(env) {
     const p = this.phase;
     if (!this.lunge) {
       this.swing += 0.01 * (1 + 0.4 * (p - 1));
       const home = W / 2 + Math.sin(this.swing) * 64;
-      this.x += Math.max(-1.6, Math.min(1.6, home - this.x));            // 돌진에서 돌아온 뒤에도 순간이동하지 않고 다가간다
+      this.drift(home);                                                  // 돌진에서 돌아온 뒤에도 순간이동하지 않고 다가간다
       this.y = BOSS_HOME_Y + Math.sin(this.t * 0.05) * 3;
       if (--this.lungeCd <= 0) { this.lungeCd = [420, 340, 260][p - 1]; this.lunge = { dir: 1 }; }
     } else {
-      this.x += Math.max(-1.6, Math.min(1.6, env.targetX - this.x));      // 플레이어 쪽으로 몰린다
-      if (this.lunge.dir === 1) {
-        this.y += 5;
-        if (this.y >= LUNGE_DEPTH) this.lunge.dir = -1;
-      } else {
-        this.y -= 2.2;
-        if (this.y <= BOSS_HOME_Y) { this.y = BOSS_HOME_Y; this.lunge = null; }
-      }
+      this.lungeStep(env);
     }
 
     if (p >= 2) {                                                          // 암전

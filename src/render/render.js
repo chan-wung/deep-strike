@@ -121,6 +121,15 @@ export function drawSub(ctx, x, y, body = COLOR.sub, dark = COLOR.subDark, frame
   ctx.restore();
 }
 
+/** 납치당하거나 구출되어 빙글 도는 잠수함 (o: { x, y, a }) */
+function drawSpunSub(ctx, o, body, dark, frame) {
+  ctx.save();
+  ctx.translate(o.x, o.y);
+  ctx.rotate(o.a);
+  drawSub(ctx, 0, 0, body, dark, frame);
+  ctx.restore();
+}
+
 function eyes(ctx, dx, y, r = 1.6) {
   ctx.fillStyle = '#fff';
   ctx.beginPath(); ctx.arc(-dx, y, r, 0, TAU); ctx.arc(dx, y, r, 0, TAU); ctx.fill();
@@ -366,6 +375,12 @@ function drawBeam(ctx, e, frame) {
   }
 }
 
+/** 보스가 맞은 순간 몸 위에 덮는 흰 타원 (원점은 보스의 중심) */
+function flashOver(ctx, cy, rx, ry, alpha = 0.55) {
+  ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+  ctx.beginPath(); ctx.ellipse(0, cy, rx, ry, 0, 0, TAU); ctx.fill();
+}
+
 function drawKraken(ctx, k, frame) {
   ctx.save();
   ctx.translate(k.x, k.y);
@@ -375,10 +390,7 @@ function drawKraken(ctx, k, frame) {
     ctx.fillStyle = 'rgba(255,40,40,.55)';
     ctx.beginPath(); ctx.arc(-2.8, -1.2, 1.1, 0, TAU); ctx.arc(2.8, -1.2, 1.1, 0, TAU); ctx.fill();
   }
-  if (k.flash > 0) {
-    ctx.fillStyle = 'rgba(255,255,255,.6)';
-    ctx.beginPath(); ctx.ellipse(0, -1.5, 7, 6.4, 0, 0, TAU); ctx.fill();
-  }
+  if (k.flash > 0) flashOver(ctx, -1.5, 7, 6.4, 0.6);
   ctx.restore();
 }
 
@@ -407,7 +419,7 @@ function drawAngler(ctx, b, frame) {
   ctx.beginPath(); ctx.arc(-13, -9, 5.5, 0, TAU); ctx.arc(13, -9, 5.5, 0, TAU); ctx.fill();
   ctx.fillStyle = '#102030';
   ctx.fillRect(-13.6, -13, 1.6, 8); ctx.fillRect(12.4, -13, 1.6, 8);
-  if (b.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(0, -2, 32, 23, 0, 0, TAU); ctx.fill(); }
+  if (b.flash > 0) flashOver(ctx, -2, 32, 23);
   const lx = b.lureX - b.x, ly = b.lureY - b.y;                      // 빛 미끼
   ctx.strokeStyle = '#7fe0ff';
   ctx.lineWidth = 1.5;
@@ -441,7 +453,7 @@ function drawManta(ctx, b, frame) {
   ctx.beginPath(); ctx.arc(-9, 10, 3.2, 0, TAU); ctx.arc(9, 10, 3.2, 0, TAU); ctx.fill();
   ctx.fillStyle = '#102030';
   ctx.beginPath(); ctx.arc(-9, 10.6, 1.4, 0, TAU); ctx.arc(9, 10.6, 1.4, 0, TAU); ctx.fill();
-  if (b.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(0, 4, 40, 18, 0, 0, TAU); ctx.fill(); }
+  if (b.flash > 0) flashOver(ctx, 4, 40, 18);
   ctx.restore();
 }
 
@@ -474,7 +486,7 @@ function drawLeviathan(ctx, b, frame) {
   ctx.beginPath(); ctx.arc(-17, -10, 6, 0, TAU); ctx.arc(17, -10, 6, 0, TAU); ctx.fill();
   ctx.fillStyle = '#102030';
   ctx.fillRect(-17.7, -15, 1.6, 10); ctx.fillRect(16.1, -15, 1.6, 10);
-  if (b.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(0, -2, 44, 29, 0, 0, TAU); ctx.fill(); }
+  if (b.flash > 0) flashOver(ctx, -2, 44, 29);
   ctx.restore();
 }
 
@@ -853,27 +865,16 @@ export function draw(ctx, game) {
   }
   ctx.setTransform(S, 0, 0, S, sx * S, sy * S);
   drawBackground(ctx, game);
-  for (const e of game.enemies) {
-    if (e.state === 'wait' || e.state === 'gone') continue;
-    if (e.beamLen > 0) drawBeam(ctx, e, frame);
-  }
-  for (const e of game.enemies) {
-    if (e.state === 'wait' || e.state === 'gone') continue;
-    drawEnemy(ctx, e, frame);
-  }
+  const visible = game.enemies.filter((e) => e.state !== 'wait' && e.state !== 'gone');
+  for (const e of visible) if (e.beamLen > 0) drawBeam(ctx, e, frame);
+  for (const e of visible) drawEnemy(ctx, e, frame);
   if (game.boss && game.boss.state !== 'dead' && phase !== 'title') drawBoss(ctx, game.boss, frame);
   if (phase !== 'title') {
     for (const it of game.items) drawItem(ctx, it, frame);
     if (game.boss && game.boss.kind === 'angler') drawDarkness(ctx, game);
     if (phase !== 'dying' && phase !== 'captured' && phase !== 'over' && phase !== 'ending') drawPlayer(ctx, game);
-    if (game.capture) {
-      const c = game.capture;
-      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.a); drawSub(ctx, 0, 0, COLOR.captive, COLOR.captiveDark, frame); ctx.restore();
-    }
-    if (game.rescue) {
-      const r = game.rescue;
-      ctx.save(); ctx.translate(r.x, r.y); ctx.rotate(r.a); drawSub(ctx, 0, 0, COLOR.sub, COLOR.subDark, frame); ctx.restore();
-    }
+    if (game.capture) drawSpunSub(ctx, game.capture, COLOR.captive, COLOR.captiveDark, frame);
+    if (game.rescue) drawSpunSub(ctx, game.rescue, COLOR.sub, COLOR.subDark, frame);
     drawShots(ctx, game);
     if (game.wave) drawWave(ctx, game.wave, frame);
     for (const f of game.fx) drawFx(ctx, f);

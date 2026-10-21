@@ -9,7 +9,11 @@ import { WEAPONS, UPGRADES, WEAPON_DEF, pickItem, pickWeapon } from './weapons.j
 import { addRecord, cleanName, qualifies } from '../app/records.js';
 
 export const TICRATE = 60;
-const START_LIVES = 3;
+/** 시작 잠수함 수 */
+export const LIVES = 3;
+/** 추가 잠수함을 주는 점수: 처음 한 번, 그 뒤로는 이만큼씩 */
+const FIRST_EXTRA = 20000;
+const NEXT_EXTRA = 70000;
 const PERFECT_BONUS = 10000;
 /** 황금 고래를 한 번 맞힐 때 받는 점수 */
 const WHALE_HIT_SCORE = 50;
@@ -44,8 +48,7 @@ const RESPAWN_INVULN = 3 * TICRATE;
 /** 잠수함이 터지는 연출 시간 (이 동안 세상은 계속 움직인다) */
 const DYING_TICKS = 50;
 
-/** 시작 잠수함 수 · 적을 잡았을 때 아이템을 품은 적의 비율 */
-export const LIVES = START_LIVES;
+/** 아이템을 품고 나오는 적의 비율 */
 const ITEM_DROP = 0.12;
 
 /** 아이템: 적을 잡으면 가끔 떨어진다. rapid 연사 강화 · shield 방어막(한 번 막기) · charge 해일 게이지 +40 */
@@ -116,7 +119,7 @@ export class Game {
     this.score = 0;
     this.lives = LIVES;
     this.stage = 1;
-    this.extraAt = 20000;
+    this.extraAt = FIRST_EXTRA;
     this.bombs = START_BOMBS;
     this.bonusPlan = this.fixedPlan ?? pickBonusPlan(this.rng);   // 이번 판의 보너스 스테이지 { 스테이지: 패턴 }
     this.stats = { shots: 0, hits: 0, bosses: 0 };
@@ -200,7 +203,7 @@ export class Game {
     if (this.score > this.hiScore) this.hiScore = this.score;
     while (this.score >= this.extraAt) {
       this.lives++;
-      this.extraAt = this.extraAt === 20000 ? 70000 : this.extraAt + 70000;
+      this.extraAt = this.extraAt === FIRST_EXTRA ? NEXT_EXTRA : this.extraAt + NEXT_EXTRA;
       this.emit('life');
     }
   }
@@ -216,9 +219,7 @@ export class Game {
     this.frame++;
     switch (this.phase) {
       case 'ready':
-        this.moveWorld();
-        this.player.step(false);                 // 스테이지가 시작되기 전에도 움직일 수 있고 아이템도 먹는다
-        this.collectItems();
+        this.coast();                            // 스테이지가 시작되기 전에도 움직일 수 있고 아이템도 먹는다
         if (--this.timer <= 0) this.phase = 'play';
         break;
       case 'play': this.play(); break;
@@ -229,9 +230,7 @@ export class Game {
         break;
       case 'captured': this.capturedTick(); break;
       case 'clear':
-        this.moveWorld();
-        this.player.step(false);                 // 스테이지를 깬 뒤에도 움직이고 아이템을 먹는다
-        this.collectItems();
+        this.coast();                            // 스테이지를 깬 뒤에도 움직이고 아이템을 먹는다
         if (--this.timer <= 0) {
           if (this.stage === FINAL_STAGE) this.allClear();
           else { this.stage++; this.startStage(); }
@@ -240,13 +239,18 @@ export class Game {
       case 'ending': this.timer++; break;
       case 'over': this.timer++; break;
       case 'bonusResult':
-        this.moveWorld();
-        this.player.step(false);
-        this.collectItems();
+        this.coast();
         if (--this.timer <= 0) { this.stage++; this.startStage(); }
         break;
       default: break;
     }
+  }
+
+  /** 싸움이 없는 구간(준비·클리어·보너스 결과): 세상은 흐르고 잠수함은 움직이며 아이템을 먹는다 */
+  coast() {
+    this.moveWorld();
+    this.player.step(false);
+    this.collectItems();
   }
 
   makeEnv() {
@@ -339,7 +343,7 @@ export class Game {
     }
   }
 
-  /** 일부 적은 아이템을 품고 나온다 (난이도별 확률). 미리 정해 두어 화면에서 반짝이게 하고, 잡으면 반드시 떨어뜨린다. 보너스 물고기는 제외 */
+  /** 일부 적은 아이템을 품고 나온다 . 미리 정해 두어 화면에서 반짝이게 하고, 잡으면 반드시 떨어뜨린다. 보너스 물고기는 제외 */
   assignItems(list) {
     for (const e of list) {
       if (e.bonus || this.rng() >= ITEM_DROP) continue;
@@ -522,7 +526,7 @@ export class Game {
       }
       const b = this.boss;
       if (b && b.targetable && overlap(sb, b.rect())) {
-        s.dead = true; this.countHit(s); this.hitBoss();
+        s.dead = true; this.countHit(s); this.damageBoss(1);
         if (s.blast) this.explode(s.x, s.y, null, true);
         continue;
       }
@@ -544,7 +548,7 @@ export class Game {
     if (b && b.targetable && !s.hit.has(b) && overlap(sb, b.rect())) {
       s.hit.add(b);
       this.countHit(s);
-      this.hitBoss();
+      this.damageBoss(1);
     }
   }
 
@@ -557,7 +561,7 @@ export class Game {
       this.hitEnemy(e);
     }
     const b = this.boss;
-    if (!bossHit && b && b.targetable && overlap(area, b.rect())) this.hitBoss();
+    if (!bossHit && b && b.targetable && overlap(area, b.rect())) this.damageBoss(1);
   }
 
   /** 쏜 한 발은 몇 명을 맞혀도 명중 한 번으로만 센다 (관통·폭발이 명중률을 부풀리지 않게) */
@@ -565,11 +569,6 @@ export class Game {
     if (s.counted) return;
     s.counted = true;
     this.stats.hits++;
-  }
-
-  /** 어뢰 한 발이 보스에 맞았다 (명중 수는 호출한 쪽이 countHit 로 센다) */
-  hitBoss() {
-    this.damageBoss(1);
   }
 
   hitEnemy(e) {
