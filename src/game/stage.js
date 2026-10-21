@@ -108,7 +108,7 @@ function bonusEnemies(kind, rng) {
       let at = prev;
       for (let tries = 0; tries < 8 && Math.hypot(at.x - prev.x, at.y - prev.y) < 50; tries++) at = { x: 24 + r() * (W - 48), y: 50 + r() * 150 };
       prev = at;
-      list.push(fish({ wave: i, delay: 30 + i * 28, at, stay: 85 }));
+      list.push(fish({ wave: i, delay: 30 + i * 36, at, stay: 180 }));
     }
   } else if (kind === 'whale') {                             // 황금 고래: 크고 단단한 한 마리가 천천히 헤엄친다
     list.push(new Enemy({ kind: 'whale', slotless: true, bonus: true, delay: 40, path: whalePath(r() < 0.5 ? -1 : 1), speed: 0.35 }));
