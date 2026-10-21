@@ -16,7 +16,8 @@ const NAME_KEY = 'deepstrike.name';         // 마지막에 쓴 이름
 const MUTE_KEY = 'deepstrike.mute';
 const MUSIC_KEY = 'deepstrike.musicMute';   // 배경 음악만 따로 끄는 설정
 const SHIP_KEY = 'deepstrike.ship';         // 마지막에 고른 잠수함 기체
-const ULT_ICON = { wave: '🌊', storm: '🎯', carpet: '💣' };   // 기체별 필살기 버튼 그림
+const GOLD_KEY = 'deepstrike.gold';         // 히든 기체(황금 잠수함) 해금 여부
+const ULT_ICON = { wave: '🌊', storm: '🎯', carpet: '💣', gold: '👑' };   // 기체별 필살기 버튼 그림
 
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -26,6 +27,7 @@ const store = {
 const game = new Game();
 game.records = parseBoards(store.get(REC_KEY));
 game.syncHi();
+game.goldUnlocked = store.get(GOLD_KEY) === '1';
 game.chooseShip(store.get(SHIP_KEY));
 setLang(store.get(LANG_KEY) || (navigator.language?.startsWith('ko') ? 'ko' : 'en'));
 
@@ -111,6 +113,10 @@ addEventListener('keydown', (e) => {
   if (game.naming) return;                                   // 이름을 쓰는 중에는 입력창이 키를 받는다 (타이핑이 게임 키로 새지 않게)
   if (e.code === 'F5' || e.metaKey || e.ctrlKey || e.altKey) return;
   sfx.unlock();                                              // 브라우저 정책상 첫 입력 뒤에야 소리를 낼 수 있다
+  if (game.phase === 'select' && e.code.startsWith('Arrow')) {   // 비밀 커맨드(↑↑↓↓←→←→): 열리면 황금 잠수함을 고른 채로 둔다. ↑ ↓ 는 출발하지 않는다
+    if (!e.repeat && game.secretKey(e.code)) { e.preventDefault(); return; }
+    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') { e.preventDefault(); return; }
+  }
   if (game.canPick && e.code in MOVE_KEYS) {                 // 기체 고르기·결과 화면에서 ← → 는 기체 고르기 (시작하지 않는다)
     e.preventDefault();
     if (!e.repeat) game.selectShip(MOVE_KEYS[e.code]);
@@ -190,7 +196,7 @@ async function saveCard() {
 shareBtn.addEventListener('click', () => { shareRecord(); shareBtn.blur(); });
 saveBtn.addEventListener('click', () => { saveCard(); saveBtn.blur(); });
 
-let last = performance.now(), acc = 0, savedShip = game.ship;
+let last = performance.now(), acc = 0, savedShip = game.pickId, savedGold = game.goldUnlocked;
 function frame(now) {
   acc += Math.min(now - last, 250);       // 탭이 멈췄다 돌아와도 한꺼번에 몰아 돌리지 않게
   last = now;
@@ -207,7 +213,8 @@ function frame(now) {
   ultBtn.classList.toggle('ready', game.bombs > 0 && !game.bonus);
   const icon = ULT_ICON[game.special];
   if (ultBtn.textContent !== icon) ultBtn.textContent = icon;
-  if (savedShip !== game.ship) { savedShip = game.ship; store.set(SHIP_KEY, game.ship); }
+  if (savedShip !== game.pickId) { savedShip = game.pickId; store.set(SHIP_KEY, game.pickId); }
+  if (savedGold !== game.goldUnlocked) { savedGold = game.goldUnlocked; store.set(GOLD_KEY, savedGold ? '1' : '0'); if (savedGold) toast(t('msg.unlock')); }
 
   draw(ctx, game);
   requestAnimationFrame(frame);

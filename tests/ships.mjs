@@ -6,7 +6,7 @@ import { SHIPS, SHIP_ORDER } from '../src/game/ships.js';
 import { STORM_MISSILES, CARPET_RADIUS, CARPET_COLS, CARPET_ROWS } from '../src/game/specials.js';
 import { addRecord, parseBoards } from '../src/app/records.js';
 import { logicalPoint } from '../src/ui/touch.js';
-import { shipCardAt, selectGoAt, shipArrowAt } from '../src/render/render.js';
+import { shipCardAt, selectGoAt, shipArrowAt, pickBtnAt, secretTitleAt } from '../src/render/render.js';
 import { begin, check, done, seq } from './lib.mjs';
 
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
@@ -16,6 +16,7 @@ const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 /** ship 으로 시작해 지금 막 play 가 된 게임 */
 function playing(ship, enemies = []) {
   const g = new Game({ bonusPlan: {}, rng: seq(0.5) });
+  g.goldUnlocked = true;
   g.chooseShip(ship);
   begin(g);
   g.enemies = [...enemies, anchor()];
@@ -43,15 +44,18 @@ run(gs, SELECT_LOCK);
 gs.selectShip(1);
 check('→ 로 다음 기체', gs.ship === 'dart' && gs.events.includes('select'));
 gs.selectShip(-1); gs.selectShip(-1);
-check('← 로 이전 기체, 처음에서는 마지막으로 돌아간다', gs.ship === 'hammer');
-gs.selectShip(1);
-check('마지막에서 → 는 처음으로', gs.ship === 'yellow');
+check('← 로 이전, 처음에서는 마지막(랜덤)으로 돌아간다', gs.pickId === 'random' && gs.randomPick === true);
+gs.selectShip(-1);
+check('랜덤에서 ← 는 해머', gs.pickId === 'hammer' && gs.randomPick === false);
+gs.selectShip(1); gs.selectShip(1);
+check('랜덤에서 → 는 처음으로', gs.pickId === 'yellow' && gs.ship === 'yellow');
 check('카드를 눌러 직접 고른다', gs.pickShip('dart') === true && gs.ship === 'dart' && gs.pickShip('ufo') === false && gs.ship === 'dart');
 gs.chooseShip('nope');
 check('알 수 없는 저장 값은 무시', gs.ship === 'dart');
 gs.pickShip('hammer'); gs.start();
 check('출발: 고른 기체와 그 기체의 폭탄 수로 시작', gs.phase === 'ready' && gs.player.ship === 'hammer' && gs.bombs === 4 && gs.player.weapon === 'heavy');
 check('판 도중에는 기체를 못 바꾼다', gs.selectShip(1) === false && gs.pickShip('dart') === false && gs.ship === 'hammer');
+check('해금 전에는 히든 기체를 못 고른다', gs.goldUnlocked === false && !gs.pickOrder.includes('gold'));
 
 // 기본 공격
 const pd = new Player(); pd.setShip('dart'); pd.firing = true;
@@ -77,9 +81,9 @@ check('다트가 노랑보다 빨리 움직인다', pdt.x > pyt.x);
 const ph = new Player(); ph.setShip('hammer'); ph.setMove(1); ph.step(false);
 check('해머는 노랑보다 느리다', ph.x < pyt.x);
 const pw = new Player(); pw.setShip('dart'); pw.setWeapon('laser');
-check('아이템 무기는 기체 기본 공격을 덮는다', pw.weapon === 'laser' && pw.weaponT > 0);
-for (let i = 0; i < 900; i++) pw.step(false);
-check('아이템 무기가 끝나면 이 기체의 기본 공격(바늘)으로 돌아온다', pw.weapon === 'needle');
+check('아이템 무기는 기체 기본 공격을 덮는다', pw.weapon === 'laser' && pw.ammo > 0);
+pw.setFire(true); for (let i = 0; i < 3000; i++) pw.step(true);
+check('아이템 무기 탄이 바닥나면 이 기체의 기본 공격(바늘)으로 돌아온다', pw.weapon === 'needle');
 pw.setWeapon('spread'); pw.reset(false);
 check('잠수함을 잃으면 기본 공격(바늘)으로, 기체는 그대로', pw.weapon === 'needle' && pw.ship === 'dart');
 
@@ -155,7 +159,7 @@ check('알 수 없는 기체 이름은 노랑', addRecord([], { ...rec, ship: 'u
 const go = playing('hammer'); go.lives = 1; go.hitPlayer(); run(go, 60);
 check('게임 오버 기록에 이번 기체가 들어간다', go.phase === 'over' && go.lastRecord.ship === 'hammer');
 go.selectShip(1);
-check('결과 화면에서도 기체를 고를 수 있다 (이름 입력 중에는 못 고른다)', go.ship === 'yellow' || go.naming);
+check('결과 화면에서도 기체를 고를 수 있다 (이름 입력 중에는 못 고른다)', go.pickId !== 'hammer' || go.naming);
 
 // 터치 좌표 변환
 const p = logicalPoint({ left: 0, top: 0, width: 224, height: 288 }, 112, 144);
@@ -169,4 +173,72 @@ check('카드 사이 틈과 카드 위아래는 카드가 아니다', shipCardAt
 check('고르기 화면이 아니면 카드가 없다', shipCardAt('title', 40, 120) === -1 && shipCardAt('over', 40, 120) === -1);
 check('출발 버튼은 아래쪽', selectGoAt('select', 252) === true && selectGoAt('select', 120) === false && selectGoAt('over', 252) === false);
 check('결과 화면의 ◀ ▶ 는 따로', shipArrowAt('over', 112 - 72, 236) === -1 && shipArrowAt('over', 112 + 72, 236) === 1 && shipArrowAt('select', 40, 236) === 0 && shipArrowAt('title', 40, 172) === 0);
+
+// 랜덤: 시작할 때마다 새로 뽑는다. 낮은 확률로 히든 기체
+const rv = (...v) => { let i = 0; return () => v[i++ % v.length]; };
+const gr = new Game({ bonusPlan: {}, rng: rv(0.9) });
+gr.start(); run(gr, SELECT_LOCK); gr.pickShip('random');
+check('랜덤을 고른다', gr.randomPick === true && gr.pickId === 'random');
+gr.start();
+check('랜덤 시작: 낮은 확률(5%)이 아니면 일반 기체 (0.9 → 해머)', gr.ship === 'hammer' && gr.player.ship === 'hammer' && gr.luckyGold === false && gr.bombs === 4, `ship=${gr.ship}`);
+const gl = new Game({ bonusPlan: {}, rng: rv(0.01) });
+gl.start(); run(gl, SELECT_LOCK); gl.pickShip('random'); gl.start();
+check('랜덤으로 0.05 미만이면 히든 기체가 걸린다 (해금 없이도)', gl.ship === 'gold' && gl.luckyGold === true && gl.player.ship === 'gold' && gl.bombs === 5 && gl.goldUnlocked === false);
+gl.chooseShip('gold');
+check('해금 안 한 히든 기체는 저장 값으로도 못 고른다', gl.randomPick === true);
+
+// 비밀 커맨드로 히든 기체 해금
+const gu = new Game({ bonusPlan: {} });
+gu.start(); run(gu, SELECT_LOCK);
+const keys = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight'];
+check('틀린 순서는 해금이 안 된다', [...keys].reverse().map((k) => gu.secretKey(k)).every((r) => r === false) && !gu.goldUnlocked);
+const res = keys.map((k) => gu.secretKey(k));
+check('↑↑↓↓←→←→ 로 히든 기체 해금', res.at(-1) === true && gu.goldUnlocked && gu.ship === 'gold' && gu.pickId === 'gold' && gu.events.includes('unlock'));
+check('해금 뒤 고를 수 있는 순서에 황금이 들어간다', gu.pickOrder.join() === 'yellow,dart,hammer,gold,random');
+gu.selectShip(1);
+check('황금에서 → 는 랜덤', gu.pickId === 'random');
+gu.selectShip(-1);
+check('랜덤에서 ← 는 황금', gu.pickId === 'gold');
+const gt = new Game({ bonusPlan: {} });
+check('타이틀에서는 커맨드가 먹지 않는다', gt.secretKey('ArrowUp') === false);
+gt.start(); run(gt, SELECT_LOCK);
+let tapped = false; for (let i = 0; i < 5; i++) { tapped = gt.secretTap(); run(gt, 10); }
+check('제목을 2초 안에 5번 누르면 해금 (터치)', tapped === true && gt.goldUnlocked && gt.ship === 'gold');
+const gt2 = new Game({ bonusPlan: {} });
+gt2.start(); run(gt2, SELECT_LOCK);
+for (let i = 0; i < 5; i++) { gt2.secretTap(); run(gt2, 70); }
+check('너무 느리게 누르면 해금이 안 된다', gt2.goldUnlocked === false);
+gu.start();
+check('해금한 황금으로 출발', gu.player.ship === 'gold' && gu.player.weapon === 'gold' && gu.special === 'gold');
+
+// 황금 잠수함 성능: 모든 기체보다 빠르고 폭탄이 많다, 관통 어뢰 세 줄
+check('황금은 가장 빠르고 폭탄이 가장 많다', SHIPS.gold.speed > Math.max(SHIPS.yellow.speed, SHIPS.dart.speed, SHIPS.hammer.speed) && SHIPS.gold.bombs > Math.max(SHIPS.yellow.bombs, SHIPS.dart.bombs, SHIPS.hammer.bombs));
+const pg = new Player(); pg.setShip('gold'); pg.firing = true; pg.step(true);
+check('황금: 한 번에 관통 어뢰 세 줄', pg.shots.length === 3 && pg.shots.every((s) => s.pierce && s.maxHit === 3 && s.kind === 'gold') && new Set(pg.shots.map((s) => s.x)).size === 3);
+// 황금 필살기: 해일 + 폭풍을 동시에
+const ga = at('bee', 40, 100), gb2 = at('bee', 180, 140);
+const gg = playing('gold', [ga, gb2]);
+gg.player.x = 100; gg.bullets.push({ x: 100, y: 200, vx: 0, vy: 0 });
+check('황금의 필살기는 황금 해일', gg.special === 'gold' && gg.ult() === true && gg.wave.kind === 'gold' && gg.bombs === 4);
+run(gg, 3);
+check('해일과 어뢰 폭풍이 함께 진행된다', gg.wave.storm.missiles.length > 0 && gg.wave.wave.y < 288 && gg.player.invuln > 0);
+run(gg, 260);
+check('끝나면 사라지고 적이 모두 잡힌다', gg.wave === null && ga.state === 'gone' && gb2.state === 'gone' && gg.bullets.length === 0, `wave=${gg.wave && gg.wave.kind}`);
+const ggb = playing('gold'); ggb.stage = 5; ggb.boss = createBoss(5); ggb.boss.state = 'fight'; ggb.boss.y = 74; ggb.boss.x = 112; ggb.boss.step = () => {};
+ggb.player.x = 112; const gbhp = ggb.boss.hp; ggb.ult(); run(ggb, 260);
+check('황금 필살기는 보스에게 해일(20) + 폭풍(24) 이상의 피해', gbhp - ggb.boss.hp >= 40, `hp ${gbhp} -> ${ggb.boss.hp}`);
+const gbomb = playing('gold'); gbomb.bombs = 0; gbomb.hitPlayer(); run(gbomb, 60);
+check('황금이 잠수함을 잃으면 폭탄은 5개로 돌아간다', gbomb.bombs === 5, `bombs=${gbomb.bombs}`);
+
+const pgw = new Player(); pgw.setShip('gold'); pgw.setWeapon('spread');
+check('황금은 무기 아이템을 먹어도 기본 공격을 유지하고 연사 강화를 받는다', pgw.weapon === 'gold' && pgw.ammo === 0 && pgw.rapid > 0);
+// 기록
+check('기록에 황금 기체가 남는다', addRecord([], { ...rec, ship: 'gold' }).list[0].ship === 'gold');
+
+// 랜덤·황금 터치 좌표
+check('카드 아래 줄: 해금 전에는 가운데 랜덤 버튼만', pickBtnAt('select', 112, 230, false) === 'random' && pickBtnAt('select', 40, 230, false) === null);
+check('해금 뒤에는 왼쪽 황금 · 오른쪽 랜덤', pickBtnAt('select', 60, 230, true) === 'gold' && pickBtnAt('select', 170, 230, true) === 'random');
+check('버튼 줄 밖·고르기 화면이 아니면 버튼이 아니다', pickBtnAt('select', 112, 200, true) === null && pickBtnAt('select', 112, 252, true) === null && pickBtnAt('title', 112, 230, true) === null);
+check('제목 영역은 위쪽', secretTitleAt('select', 28) === true && secretTitleAt('select', 120) === false && secretTitleAt('title', 28) === false);
+check('카드 · 출발 버튼은 버튼 줄과 겹치지 않는다', shipCardAt('select', 40, 230) === -1 && selectGoAt('select', 230) === false);
 done();

@@ -235,6 +235,7 @@ const SOUNDS = {
   select: (s, t) => s.tone('square', 660, 880, t, 0.06, 0.1),
   storm: (s, t) => { s.tone('sawtooth', 200, 1400, t, 0.5, 0.18); s.noise(t, 0.6, 0.18, 3500); for (let i = 0; i < 4; i++) s.tone('square', 900, 500, t + 0.1 + i * 0.08, 0.1, 0.08); },
   carpet: (s, t) => { s.tone('sine', 90, 35, t, 0.8, 0.3); s.noise(t, 0.5, 0.25, 700); },
+  unlock: (s, t) => s.run([784, 988, 1175, 1568, 1976], t, 0.08, 'triangle', 0.25, 0.16),
   combo: (s, t) => s.run([784, 988, 1175], t, 0.04, 'square', 0.08, 0.1),
   shot: (s, t) => s.tone('square', 900, 420, t, 0.07, 0.1),
   boom: (s, t) => { s.noise(t, 0.2, 0.22, 1800); s.tone('triangle', 240, 60, t, 0.18, 0.18); },

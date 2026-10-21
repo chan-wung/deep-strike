@@ -1,12 +1,13 @@
 /**
- * 새 무기: 아이템으로 먹으면 15초 동안 기본 어뢰 대신 쓴다.
+ * 새 무기: 아이템으로 먹으면 정해진 탄수(WEAPON_AMMO)만큼 기본 공격 대신 쓴다. 한 번 쏠 때마다 한 발씩 줄고, 다 쓰면 기본 공격으로 돌아온다.
  *  spread : 3갈래 부채꼴
  *  laser  : 빠른 광선이 적을 꿰뚫는다 (한 발이 같은 적은 한 번만 맞힌다)
  *  homing : 가까운 적을 향해 휘어 간다
  * 어떤 아이템이 언제 나오는지(스테이지별 분배)도 여기서 정한다.
  */
 export const WEAPONS = ['spread', 'laser', 'homing', 'blast', 'sonic'];
-export const WEAPON_TICKS = 900;
+/** 무기별 탄수 (한 번 쏘는 묶음 수: 확산탄은 세 갈래가 한 발). 센 무기일수록 적다 */
+export const WEAPON_AMMO = { spread: 80, laser: 70, homing: 60, blast: 45, sonic: 40 };
 
 /**
  * 무기 모양: shots 는 한 기체가 한 번에 쏘는 발 수, angles 는 위쪽(-π/2) 기준 벌어짐.
@@ -17,6 +18,7 @@ export const WEAPON_DEF = {
   torpedo: { shots: 1, angles: [0], speed: 4.5, cooldown: 7, plain: true, rounds: 3, rapidRounds: 12 },
   needle: { shots: 2, angles: [0], speed: 3.8, cooldown: 6, plain: true, kind: 'needle', offsets: [-3, 3], k: 0.85, rapidRounds: 6 },
   heavy: { shots: 1, angles: [0], speed: 4.2, cooldown: 10, plain: true, kind: 'heavy', pierce: true, maxHit: 2, w: 2.6, k: 1.12, rounds: 3, rapidRounds: 12 },
+  gold: { shots: 1, angles: [0], speed: 4.6, cooldown: 6, plain: true, kind: 'gold', pierce: true, maxHit: 3, offsets: [-5, 0, 5], w: 2.6, k: 1.2, rounds: 3, rapidRounds: 12 },
   spread: { shots: 3, angles: [-0.26, 0, 0.26], speed: 4.2, cooldown: 8 },
   laser: { shots: 1, angles: [0], speed: 8, cooldown: 9, pierce: true },
   homing: { shots: 1, angles: [0], speed: 3.4, cooldown: 9, homing: true },

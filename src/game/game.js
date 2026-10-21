@@ -6,7 +6,7 @@ import { createBoss } from './bosses.js';
 import { Player, PLAYER_Y, TWIN_GAP, RAPID_TICKS, UPGRADE_MAX } from './player.js';
 import { buildStage, isBonus, isBoss, bonusKind, pickBonusPlan, BONUS_FISH, BONUS_TARGETS, BONUS_WHALE_HP, BONUS_PEARLS } from './stage.js';
 import { WEAPONS, UPGRADES, WEAPON_DEF, pickItem, pickWeapon } from './weapons.js';
-import { SHIPS, SHIP_ORDER, DEFAULT_SHIP, isShip } from './ships.js';
+import { SHIPS, SHIP_ORDER, DEFAULT_SHIP, HIDDEN_SHIP, RANDOM, GOLD_CHANCE, isShip } from './ships.js';
 import { SPECIALS } from './specials.js';
 import { addRecord, cleanName, qualifies } from '../app/records.js';
 
@@ -48,6 +48,11 @@ const MAX_BULLETS_BOSS = 48;
 const MAX_MINIONS = 6;
 /** 기체 고르기 화면이 나온 뒤 이만큼 지나야 키로 출발한다 (타이틀을 넘긴 입력이 그대로 출발이 되지 않게) */
 export const SELECT_LOCK = 15;
+/** 비밀 커맨드(히든 기체 해금): 기체 고르기 화면에서 누르는 순서 */
+export const SECRET_CODE = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight'];
+/** 터치로 해금: 고르기 화면 제목을 이 시간(틱) 안에 이만큼 누른다 */
+export const SECRET_TAPS = 5;
+const SECRET_TAP_TICKS = 2 * TICRATE;
 /** 게임 오버 결과 화면이 나온 뒤 이만큼 지나야 키로 다시 시작한다 (연타하다 결과를 못 보는 일을 막는다) */
 export const OVER_LOCK = TICRATE;
 /** 잠수함을 잃고 곧바로 되살아난 뒤 맞지 않는 시간 (3초, 깜빡인다) */
@@ -93,6 +98,11 @@ export class Game {
   constructor({ rng = Math.random, bonusPlan = null } = {}) {
     this.rng = rng;
     this.ship = DEFAULT_SHIP;      // 타이틀·결과 화면에서 고른 기체. 새 게임이 시작될 때 적용된다
+    this.randomPick = false;       // '랜덤'을 골랐나: 새 게임을 시작할 때마다 기체를 새로 뽑는다
+    this.goldUnlocked = false;     // 히든 기체 해금 (main 이 저장소에서 읽어 채운다)
+    this.luckyGold = false;        // 이번 판 랜덤으로 히든 기체가 걸렸다
+    this.secretKeys = [];
+    this.secretTaps = [];
     this.fixedPlan = bonusPlan;
     this.player = new Player();
     this.formation = new Formation();
@@ -131,6 +141,7 @@ export class Game {
     this.lives = LIVES;
     this.stage = 1;
     this.extraAt = FIRST_EXTRA;
+    this.rollRandom();
     this.player.setShip(this.ship);
     this.bombs = this.startBombs;
     this.combo = 0;
@@ -207,23 +218,71 @@ export class Game {
   /** 기체를 고를 수 있는 때: 기체 고르기 화면, 그리고 게임 오버 결과 화면(이름을 쓰는 중은 제외) */
   get canPick() { return this.phase === 'select' || (this.phase === 'over' && !this.naming); }
 
+  /** 고를 수 있는 것들의 순서: 기체 셋, (해금했다면) 히든 기체, 랜덤 */
+  get pickOrder() { return [...SHIP_ORDER, ...(this.goldUnlocked ? [HIDDEN_SHIP] : []), RANDOM]; }
+  /** 지금 고른 것 (랜덤이면 'random') */
+  get pickId() { return this.randomPick ? RANDOM : this.ship; }
+
   /** 기체를 한 칸 넘긴다 (dir: 1 다음 · -1 이전) */
   selectShip(dir) {
     if (!this.canPick) return false;
-    const n = SHIP_ORDER.length;
-    return this.pickShip(SHIP_ORDER[(SHIP_ORDER.indexOf(this.ship) + dir + n) % n]);
+    const order = this.pickOrder, n = order.length;
+    return this.pickShip(order[(order.indexOf(this.pickId) + dir + n) % n]);
   }
 
   /** 기체를 직접 고른다 (카드를 눌렀을 때). 고를 수 없거나 알 수 없는 이름이면 false */
   pickShip(id) {
-    if (!this.canPick || !isShip(id)) return false;
-    if (id !== this.ship) { this.ship = id; this.emit('select'); }
+    if (!this.canPick || !this.pickOrder.includes(id)) return false;
+    const was = this.pickId;
+    this.randomPick = id === RANDOM;
+    if (!this.randomPick) this.ship = id;
+    if (this.pickId !== was) this.emit('select');
     return true;
   }
 
-  /** 저장된 기체 이름으로 처음 상태를 맞춘다 (알 수 없는 이름은 무시) */
+  /** 저장된 이름으로 처음 상태를 맞춘다 (알 수 없는 이름은 무시. 해금하지 않은 히든 기체도 무시) */
   chooseShip(id) {
-    if (isShip(id)) this.ship = id;
+    if (id === RANDOM) this.randomPick = true;
+    else if (isShip(id) && (id !== HIDDEN_SHIP || this.goldUnlocked)) { this.ship = id; this.randomPick = false; }
+  }
+
+  /** 랜덤을 골랐다면 이번 판의 기체를 뽑는다: 낮은 확률로 히든 기체, 아니면 기체 셋 중 하나 */
+  rollRandom() {
+    this.luckyGold = false;
+    if (!this.randomPick) return;
+    if (this.rng() < GOLD_CHANCE) { this.ship = HIDDEN_SHIP; this.luckyGold = true; this.emit('unlock'); }
+    else this.ship = SHIP_ORDER[Math.min(SHIP_ORDER.length - 1, Math.floor(this.rng() * SHIP_ORDER.length))];
+  }
+
+  /** 히든 기체를 연다. 새로 열렸으면 true */
+  unlockGold() {
+    if (this.goldUnlocked) return false;
+    this.goldUnlocked = true;
+    this.randomPick = false;
+    this.ship = HIDDEN_SHIP;
+    this.emit('unlock');
+    return true;
+  }
+
+  /** 기체 고르기 화면에서 누른 키를 모아 비밀 커맨드를 맞춘다. 이 키가 커맨드의 일부면(맞든 아니든) 화면은 그 키로 아무것도 하지 않는다 */
+  secretKey(code) {
+    if (this.phase !== 'select') return false;
+    this.secretKeys.push(code);
+    this.secretKeys = this.secretKeys.slice(-SECRET_CODE.length);
+    if (this.secretKeys.length === SECRET_CODE.length && SECRET_CODE.every((c, i) => c === this.secretKeys[i])) {
+      this.secretKeys = [];
+      return this.unlockGold();
+    }
+    return false;
+  }
+
+  /** 터치: 기체 고르기 화면의 제목을 짧은 시간에 여러 번 누르면 히든 기체가 열린다 */
+  secretTap() {
+    if (this.phase !== 'select') return false;
+    const now = this.frame;
+    this.secretTaps = [...this.secretTaps.filter((t) => now - t <= SECRET_TAP_TICKS), now];
+    if (this.secretTaps.length >= SECRET_TAPS) { this.secretTaps = []; return this.unlockGold(); }
+    return false;
   }
 
   /** 지금 필살기를 쓸 수 있나 (폭탄이 있어야 하고, 보너스 스테이지에서는 못 쓴다) */
@@ -233,9 +292,9 @@ export class Game {
     if (!this.ultReady) return false;
     this.bombs--;
     this.wave = SPECIALS[this.special].start(this);
-    this.emit({ wave: 'ult', storm: 'storm', carpet: 'carpet' }[this.special]);
+    this.emit({ wave: 'ult', storm: 'storm', carpet: 'carpet', gold: 'ult' }[this.special]);
     this.shake(2.5, 40);
-    this.flash(this.special === 'wave' ? 14 : 8);
+    this.flash(this.special === 'wave' || this.special === 'gold' ? 14 : 8);
     return true;
   }
 

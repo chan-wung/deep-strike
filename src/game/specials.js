@@ -87,6 +87,16 @@ export const SPECIALS = {
     },
   },
 
+  /** 황금 해일 (황금): 대해일과 어뢰 폭풍을 한꺼번에 */
+  gold: {
+    start: (g) => ({ kind: 'gold', wave: SPECIALS.wave.start(g), storm: SPECIALS.storm.start(g), waveDone: false, stormDone: false }),
+    step(g, s) {
+      if (!s.waveDone) s.waveDone = SPECIALS.wave.step(g, s.wave);
+      if (!s.stormDone) s.stormDone = SPECIALS.storm.step(g, s.storm);
+      return s.waveDone && s.stormDone;
+    },
+  },
+
   carpet: {
     start() {
       const blasts = [];

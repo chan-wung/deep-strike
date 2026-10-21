@@ -50,7 +50,7 @@ export function makeCard(rec) {
   ctx.save();
   ctx.translate(478, 168);
   ctx.scale(8, 8);
-  drawSub(ctx, 0, 0, body, dark);
+  drawSub(ctx, 0, 0, body, dark, 0, ship);
   ctx.restore();
   label(t(`ship.${ship}`), 478, 232, 16, body, 'center');
   return c;

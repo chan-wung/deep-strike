@@ -1,6 +1,6 @@
 import { W, H } from '../game/paths.js';
-import { shipArrowAt, shipCardAt, selectGoAt } from '../render/render.js';
-import { SHIP_ORDER } from '../game/ships.js';
+import { shipArrowAt, shipCardAt, selectGoAt, pickBtnAt, secretTitleAt } from '../render/render.js';
+import { SHIP_ORDER, HIDDEN_SHIP, RANDOM } from '../game/ships.js';
 
 /**
  * 모바일 터치 조작: 화면을 누르고 있는 동안 자동으로 발사하고, 누른 채 좌우로 끌면 잠수함이 따라온다.
@@ -42,6 +42,9 @@ export function setupTouch(game, canvas, root = document.body) {
       if (game.phase === 'select') {
         const card = shipCardAt(game.phase, p.x, p.y);
         if (card >= 0) { game.pickShip(SHIP_ORDER[card]); return; }          // 카드는 고르기만 한다 (출발은 아래 버튼)
+        const btn = pickBtnAt(game.phase, p.x, p.y, game.goldUnlocked);
+        if (btn) { game.pickShip(btn === 'gold' ? HIDDEN_SHIP : RANDOM); return; }   // 카드 아래 줄: 히든 기체 · 랜덤
+        if (secretTitleAt(game.phase, p.y)) { game.secretTap(); return; }              // 제목을 여러 번 누르면 히든 기체가 열린다
         if (!selectGoAt(game.phase, p.y)) return;                              // 카드·버튼이 아닌 곳은 무시
       } else {
         const dir = shipArrowAt(game.phase, p.x, p.y);

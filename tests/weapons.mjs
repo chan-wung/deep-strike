@@ -1,7 +1,7 @@
 import { Game } from '../src/game/game.js';
 import { Enemy } from '../src/game/enemy.js';
 import { Player, PLAYER_Y, TWIN_GAP } from '../src/game/player.js';
-import { WEAPONS, WEAPON_TICKS, itemPool, pickItem, pickWeapon } from '../src/game/weapons.js';
+import { WEAPONS, WEAPON_AMMO, itemPool, pickItem, pickWeapon } from '../src/game/weapons.js';
 import { begin, check, done, seq } from './lib.mjs';
 
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
@@ -44,23 +44,30 @@ const pl = new Player();
 pl.setWeapon('laser'); pl.setFire(true); pl.step();
 check('레이저는 관통 탄이고 어뢰보다 빠르다', pl.shots[0].pierce === true && Math.abs(pl.shots[0].vy) > 4.5);
 
-// 시간제: 15초 뒤 기본 어뢰로
+// 탄수제: 무기마다 정해진 탄수만큼 쏘면 기본 어뢰로
 const pw = new Player();
 pw.setWeapon('laser');
-check('무기 시간은 15초', WEAPON_TICKS === 900 && pw.weapon === 'laser' && pw.weaponT === 900);
-for (let i = 0; i < 899; i++) pw.step(false);
-check('15초가 다 되기 전에는 유지', pw.weapon === 'laser');
-pw.step(false);
-check('15초가 지나면 기본 어뢰', pw.weapon === 'torpedo' && pw.weaponT === 0);
-pw.setWeapon('homing'); for (let i = 0; i < 300; i++) pw.step(false);
+check('무기마다 탄수가 정해져 있다', WEAPONS.every((w) => WEAPON_AMMO[w] > 0) && WEAPON_AMMO.laser === 70 && pw.weapon === 'laser' && pw.ammo === 70);
+for (let i = 0; i < 300; i++) pw.step(false);
+check('쏘지 않고 시간이 흘러도 탄은 줄지 않는다', pw.weapon === 'laser' && pw.ammo === 70);
+pw.setFire(true);
+let volleys = 0;
+for (let i = 0; i < 2000 && pw.weapon === 'laser'; i++) if (pw.step(true)) volleys++;
+check('한 번 쏠 때마다 탄이 하나 줄고, 다 쏘면 기본 어뢰', volleys === 70 && pw.weapon === 'torpedo' && pw.ammo === 0, `volleys=${volleys}`);
+pw.setFire(false);
+pw.setWeapon('homing'); pw.setFire(true); for (let i = 0; i < 40; i++) pw.step(true);
+const left = pw.ammo;
 pw.setWeapon('spread');
-check('다른 무기를 먹으면 교체되고 시간이 새로 찬다', pw.weapon === 'spread' && pw.weaponT === 900);
+check('다른 무기를 먹으면 교체되고 탄이 새로 찬다', left < WEAPON_AMMO.homing && pw.weapon === 'spread' && pw.ammo === WEAPON_AMMO.spread);
+pw.setFire(false); pw.step(false);
+const sp = new Player(); sp.setWeapon('spread'); sp.setFire(true); sp.step(true);
+check('확산탄은 세 갈래를 쏴도 탄은 하나만 쓴다', sp.shots.length === 3 && sp.ammo === WEAPON_AMMO.spread - 1);
 pw.setWeapon('nope');
 check('모르는 무기는 무시', pw.weapon === 'spread');
 pw.reset(true);
-check('스테이지를 넘어가도(reset(true)) 무기 유지', pw.weapon === 'spread' && pw.weaponT === 900);
+check('스테이지를 넘어가도(reset(true)) 무기와 남은 탄 유지', pw.weapon === 'spread' && pw.ammo === WEAPON_AMMO.spread);
 pw.reset(false);
-check('잠수함을 잃으면(reset) 무기가 사라진다', pw.weapon === 'torpedo' && pw.weaponT === 0);
+check('잠수함을 잃으면(reset) 무기가 사라진다', pw.weapon === 'torpedo' && pw.ammo === 0);
 
 // 유도: 비스듬히 있는 적 쪽으로 휘어 간다
 const ph = new Player();
@@ -95,7 +102,7 @@ check('레이저 한 발은 같은 적을 두 번 때리지 않는다', (() => {
 const gp = playing([]);
 gp.items.push({ x: gp.player.x, y: PLAYER_Y, type: 'laser' });
 gp.collectItems();
-check('무기 아이템을 먹으면 무기가 바뀐다', gp.player.weapon === 'laser' && gp.player.weaponT === 900 && gp.items.length === 0 && gp.popups.some((q) => q.key === 'item.laser'));
+check('무기 아이템을 먹으면 무기가 바뀐다', gp.player.weapon === 'laser' && gp.player.ammo === WEAPON_AMMO.laser && gp.items.length === 0 && gp.popups.some((q) => q.key === 'item.laser'));
 
 // 적이 품은 아이템: 스테이지가 오르면 무기도 나온다
 const gc = new Game({ bonusPlan: {}, rng: seq(0.01, 0.99) }); begin(gc); gc.stage = 1; gc.startStage();

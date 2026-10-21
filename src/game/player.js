@@ -1,6 +1,6 @@
 import { W } from './paths.js';
-import { WEAPON_DEF, WEAPON_TICKS } from './weapons.js';
-import { SHIPS, DEFAULT_SHIP, isShip } from './ships.js';
+import { WEAPON_DEF, WEAPON_AMMO } from './weapons.js';
+import { SHIPS, DEFAULT_SHIP, HIDDEN_SHIP, isShip } from './ships.js';
 
 export const PLAYER_Y = 262;
 const SHOT_SPEED = 4.5;
@@ -31,7 +31,7 @@ export class Player {
     this.rapid = keepTwin ? this.rapid : 0;         // 연사 강화 남은 틱
     this.shield = keepTwin ? this.shield : false;   // 방어막: 한 번 맞는 것을 막는다
     this.weapon = keepTwin ? this.weapon : this.base;   // 새 무기와 남은 틱: 잠수함을 잃으면 사라지고 기체의 기본 공격으로 돌아온다
-    this.weaponT = keepTwin ? this.weaponT : 0;
+    this.ammo = keepTwin ? this.ammo : 0;           // 아이템 무기의 남은 탄수 (0 이면 기본 공격)
     this.boost = keepTwin ? this.boost : 0;         // 영구 강화(단계): 추진기·어뢰 가속·장전기. 잠수함을 잃으면 사라진다
     this.velo = keepTwin ? this.velo : 0;
     this.reload = keepTwin ? this.reload : 0;
@@ -47,7 +47,7 @@ export class Player {
   /** 기체를 바꾼다 (새 게임을 시작할 때). 아이템 무기가 없으면 기본 공격도 따라 바뀐다 */
   setShip(id) {
     this.ship = isShip(id) ? id : DEFAULT_SHIP;
-    if (this.weaponT <= 0) this.weapon = this.base;
+    if (this.ammo <= 0) this.weapon = this.base;
   }
 
   get base() { return SHIPS[this.ship].base; }
@@ -65,11 +65,15 @@ export class Player {
   setFire(on) { this.firing = on; }
   moveTo(x) { this.target = x; }
 
-  /** 새 무기로 바꾼다 (15초). 이미 쓰던 무기를 또 먹어도 시간이 새로 찬다 */
+  /**
+   * 새 무기로 바꾼다 (무기마다 정해진 탄수). 이미 쓰던 무기를 또 먹어도 탄이 새로 찬다.
+   * 황금 잠수함은 기본 공격이 아이템 무기보다 세서 바꾸지 않고, 대신 연사 강화를 받는다
+   */
   setWeapon(type) {
     if (!WEAPON_DEF[type]) return;
+    if (this.ship === HIDDEN_SHIP) { this.rapid = Math.max(this.rapid, RAPID_TICKS); return; }
     this.weapon = type;
-    this.weaponT = WEAPON_TICKS;
+    this.ammo = WEAPON_AMMO[type] ?? 40;
   }
 
   /**
@@ -153,12 +157,12 @@ export class Player {
     this.x = Math.max(8, Math.min(this.maxX, this.x));
     if (this.invuln > 0 && --this.invuln === 0) this.quiet = false;
     if (this.rapid > 0) this.rapid--;
-    if (this.weaponT > 0 && --this.weaponT === 0) this.weapon = this.base;
     this.moveShots(targets);
     if (this.cooldown > 0) this.cooldown--;
     if (canFire && this.firing && this.cooldown <= 0) {
       const n = this.tryFire();
       if (n) {
+        if (this.ammo > 0 && --this.ammo === 0) this.weapon = this.base;         // 마지막 탄을 쐈으면 기본 공격으로
         const cd = Math.max(MIN_COOLDOWN, WEAPON_DEF[this.weapon].cooldown - this.reload);
         this.cooldown = this.rapid > 0 ? Math.max(RAPID_COOLDOWN, cd - 3) : cd;
         return n;
