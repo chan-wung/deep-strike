@@ -80,7 +80,8 @@ export class Player {
     const def = WEAPON_DEF[this.weapon];
     const ships = this.twin ? 2 : 1;
     const per = def.shots * ships;
-    if (this.shots.length + per > per * ((this.rapid > 0 ? 8 : 2) + this.reload)) return 0;   // 연사 중에는 줄줄이 이어 나간다
+    const rounds = this.rapid > 0 ? (def.rapidRounds ?? 8) : (def.rounds ?? 2);               // 연사 중에는 줄줄이 이어 나간다
+    if (this.shots.length + per > per * (rounds + this.reload)) return 0;
     for (let i = 0; i < ships; i++) {
       const x = this.x + i * TWIN_GAP;
       if (def.plain) {                                  // 기본 공격: 곧장 위로 (기체마다 줄 수·관통이 다르다)
