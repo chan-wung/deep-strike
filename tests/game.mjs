@@ -70,7 +70,7 @@ check('호위 하나: 800점', g4b.score === 800);
 // 어뢰 수
 const g5 = playing([formed('bee')]);
 g5.setFire(true); run(g5, 30);
-check('어뢰는 두 발까지, 쏜 수가 기록된다', g5.player.shots.length <= 2 && g5.stats.shots >= 2, `shots=${g5.stats.shots}`);
+check('어뢰는 세 발까지, 쏜 수가 기록된다', g5.player.shots.length <= 3 && g5.stats.shots >= 2, `shots=${g5.stats.shots}`);
 
 // 죽음
 const g6 = playing([formed('bee')]);

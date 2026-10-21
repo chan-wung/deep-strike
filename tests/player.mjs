@@ -14,7 +14,7 @@ const q = new Player();
 q.setFire(true);
 let fired = 0;
 for (let i = 0; i < 20; i++) fired += q.step();
-check('어뢰는 화면에 두 발까지', q.shots.length === 2 && fired === 2, `shots=${q.shots.length}`);
+check('어뢰는 화면에 세 발까지', q.shots.length === 3 && fired === 3, `shots=${q.shots.length}`);
 for (let i = 0; i < 80; i++) q.step();
 check('어뢰는 화면 밖으로 나가면 사라진다', q.shots.every((s) => s.y > -8));
 
@@ -22,7 +22,7 @@ const tw = new Player();
 tw.twin = true;
 tw.setFire(true);
 for (let i = 0; i < 40; i++) tw.step();
-check('쌍둥이는 어뢰를 두 줄씩 네 발까지', tw.shots.length === 4, `shots=${tw.shots.length}`);
+check('쌍둥이는 어뢰를 두 줄씩 여섯 발까지', tw.shots.length === 6, `shots=${tw.shots.length}`);
 check('쌍둥이의 두 줄은 TWIN_GAP 만큼 떨어져 있다', Math.abs(tw.shots[1].x - tw.shots[0].x - TWIN_GAP) < 0.001);
 check('쌍둥이는 맞는 폭이 넓다', tw.rect().x1 - tw.rect().x0 > new Player().rect().x1 - new Player().rect().x0);
 tw.setMove(1);

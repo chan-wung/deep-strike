@@ -14,9 +14,9 @@ export const WEAPON_TICKS = 900;
  * maxHit 는 관통 어뢰가 꿰뚫을 수 있는 적의 수, rounds · rapidRounds 는 화면에 동시에 있을 수 있는 묶음 수(기본 2 · 연사 중 8)
  */
 export const WEAPON_DEF = {
-  torpedo: { shots: 1, angles: [0], speed: 4.5, cooldown: 7, plain: true },
-  needle: { shots: 2, angles: [0], speed: 3.8, cooldown: 6, plain: true, kind: 'needle', offsets: [-3, 3], k: 1.15, rounds: 1, rapidRounds: 4 },
-  heavy: { shots: 1, angles: [0], speed: 4.2, cooldown: 10, plain: true, kind: 'heavy', pierce: true, maxHit: 2, w: 2.6, k: 1.12 },
+  torpedo: { shots: 1, angles: [0], speed: 4.5, cooldown: 7, plain: true, rounds: 3, rapidRounds: 12 },
+  needle: { shots: 2, angles: [0], speed: 3.8, cooldown: 6, plain: true, kind: 'needle', offsets: [-3, 3], k: 0.85, rapidRounds: 6 },
+  heavy: { shots: 1, angles: [0], speed: 4.2, cooldown: 10, plain: true, kind: 'heavy', pierce: true, maxHit: 2, w: 2.6, k: 1.12, rounds: 3, rapidRounds: 12 },
   spread: { shots: 3, angles: [-0.26, 0, 0.26], speed: 4.2, cooldown: 8 },
   laser: { shots: 1, angles: [0], speed: 8, cooldown: 9, pierce: true },
   homing: { shots: 1, angles: [0], speed: 3.4, cooldown: 9, homing: true },
