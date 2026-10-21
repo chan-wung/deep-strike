@@ -4,6 +4,9 @@ import { overlap } from './geom.js';
 /** 5 · 10 · 15 · 20 스테이지의 보스 번호 (1부터) */
 export const bossIndex = (stage) => Math.max(1, Math.round(stage / 5));
 export const BOSS_HOME_Y = 74;
+/** 보스 체력: 첫 보스 BOSS_HP_BASE, 보스 번호가 오를 때마다 BOSS_HP_STEP 씩 (100 · 150 · 200 · 250) */
+export const BOSS_HP_BASE = 100;
+export const BOSS_HP_STEP = 50;
 /** 돌진하는 보스(아귀·리바이어던)가 내려가는 가장 깊은 곳 */
 export const LUNGE_DEPTH = 232;
 const DRIFT_STEP = 1.6;
@@ -19,7 +22,7 @@ export class Boss {
     this.kind = kind;
     this.nameKey = nameKey;
     this.level = bossIndex(stage);
-    this.maxHp = 60 + 30 * (this.level - 1);
+    this.maxHp = BOSS_HP_BASE + BOSS_HP_STEP * (this.level - 1);
     this.hp = this.maxHp;
     this.x = W / 2;
     this.y = -40;

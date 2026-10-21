@@ -851,7 +851,8 @@ function drawEnding(ctx, game) {
   ctx.fillRect(0, 0, W, H);
   ctx.globalAlpha = Math.min(1, T / 40);
   shadowText(ctx, t('msg.allclear'), cx, 58, 16, COLOR.accent);
-  const lines = t('ending.story');
+  const story = t('ending.story');
+  const lines = [...story.slice(0, 3), t(`ending.sub.${game.ship}`), ...story.slice(3)];   // 떠오르는 잠수함 문장은 고른 기체의 것
   lines.forEach((s, i) => {
     const a = Math.min(1, (T - 50 - i * 100) / 40);
     if (a <= 0) return;

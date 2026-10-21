@@ -164,7 +164,7 @@ check('보스는 크라켄 → 아귀 → 가오리 → 리바이어던 순서�
   const k = [5, 10, 15, 20].map((s) => createBoss(s).kind).join();
   return k === 'kraken,angler,manta,leviathan' && BOSS_CLASSES.length === 4 && createBoss(20) instanceof Leviathan;
 })());
-check('보스 번호가 오를수록 체력이 크다', createBoss(5).maxHp === 60 && createBoss(10).maxHp === 90 && createBoss(15).maxHp === 120 && createBoss(20).maxHp === 150);
+check('보스 번호가 오를수록 체력이 크다', createBoss(5).maxHp === 100 && createBoss(10).maxHp === 150 && createBoss(15).maxHp === 200 && createBoss(20).maxHp === 250);
 check('보스 이름 문구가 영어·한국어에 모두 있다', (() => {
   const out = [];
   for (const lang of ['en', 'ko']) { setLang(lang); for (const s of [5, 10, 15, 20]) { const b = createBoss(s); out.push(t(b.nameKey) !== b.nameKey); } }
@@ -279,7 +279,7 @@ check('물고기 떼는 난수를 주면 매번 다르다', JSON.stringify(bk('s
 
 // 리바이어던 (마지막 보스)
 const lv = new Leviathan(20); lv.state = 'fight'; lv.t = 1;
-check('리바이어던: 체력 150, 크기가 크다', lv.maxHp === 150 && lv.halfW >= 44);
+check('리바이어던: 체력 250, 크기가 크다', lv.maxHp === 250 && lv.halfW >= 44);
 {
   const e = stubEnv(); lv.fight(e);
   const e2 = stubEnv(); for (let i = 0; i < 300; i++) lv.fight(e2);

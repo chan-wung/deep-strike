@@ -25,7 +25,7 @@ check('보스 스테이지에는 대열이 없다', buildStage(5).length === 0);
 // 크라켄 단독
 const stubEnv = () => { const shots = [], minions = []; return { shots, minions, targetX: 112, shoot: (x, y, a, s) => shots.push({ x, y, a, s }), minion: (x, y) => minions.push({ x, y }) }; };
 const k1 = new Kraken(5), k2 = new Kraken(10);
-check('체력은 스테이지가 오를수록 커진다', k1.maxHp === 60 && k2.maxHp === 90 && k1.level === 1 && k2.level === 2);
+check('체력은 스테이지가 오를수록 커진다', k1.maxHp === 100 && k2.maxHp === 150 && k1.level === 1 && k2.level === 2);
 check('체력 비율로 3단계', k1.phase === 1 && (k1.hp = 35, k1.phase === 2) && (k1.hp = 15, k1.phase === 3));
 const k = new Kraken(5);
 check('처음엔 화면 위에서 맞지 않는다', !k.targetable && k.state === 'enter');
@@ -114,7 +114,7 @@ const kw = (bossX) => {
   run(g, 60);
   return g.boss.hp;
 };
-check('해일은 크라켄에게 피해 20 (옆으로 치우쳐 있어도 맞는다)', kw(112) === 40 && kw(30) === 40 && kw(200) === 40, `hp=${kw(112)}`);
+check('해일은 크라켄에게 피해 20 (옆으로 치우쳐 있어도 맞는다)', kw(112) === 80 && kw(30) === 80 && kw(200) === 80, `hp=${kw(112)}`);
 
 const gg = playing([formed('bee', 3, 4)]);
 gg.player.shots.push({ x: gg.enemies[0].x, y: gg.enemies[0].y + 4.5 });

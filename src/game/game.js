@@ -14,8 +14,8 @@ export const TICRATE = 60;
 /** 시작 잠수함 수 */
 export const LIVES = 3;
 /** 추가 잠수함을 주는 점수: 처음 한 번, 그 뒤로는 이만큼씩 */
-const FIRST_EXTRA = 20000;
-const NEXT_EXTRA = 70000;
+const FIRST_EXTRA = 30000;
+const NEXT_EXTRA = 100000;
 const PERFECT_BONUS = 10000;
 /** 황금 고래를 한 번 맞힐 때 받는 점수 */
 const WHALE_HIT_SCORE = 50;
@@ -25,9 +25,13 @@ const PEARL_LIFE = 420;
 const PEARL_GAP = 26;
 /** 엔딩: 이 스테이지의 보스를 쓰러뜨리면 끝난다 */
 export const FINAL_STAGE = 20;
-/** 이 스테이지부터 적 탄이 조금 빨라지고 동시 급강하가 하나 늘어난다 */
-export const LATE_FROM = 11;
-const LATE_BULLET = 1.1;
+/** 이 스테이지부터 적 탄이 빨라지고 동시 급강하가 하나 늘어난다. FINAL_PUSH_FROM 부터는 한 번 더 */
+export const LATE_FROM = 8;
+const LATE_BULLET = 1.2;
+export const FINAL_PUSH_FROM = 15;
+const FINAL_PUSH_BULLET = 1.1;
+/** 이 스테이지부터 급강하하는 적이 세 발씩 쏜다 (그 전에는 3 스테이지부터 두 발) */
+const TRIPLE_SHOT_FROM = 12;
 /** 엔딩에서 남은 잠수함 한 대마다 주는 점수 */
 const CLEAR_BONUS_PER_LIFE = 10000;
 /** 엔딩이 나온 뒤 이만큼 지나야 키로 넘길 수 있다 */
@@ -240,17 +244,20 @@ export class Game {
   /** 지금 콤보 배율 (1 ~ COMBO_MAX) */
   get comboMult() { return Math.min(COMBO_MAX, 1 + Math.floor(this.combo / COMBO_STEP) * 0.5); }
 
-  get diveSpeed() { return Math.min(1.7 + 0.08 * (this.stage - 1), 2.8); }
+  get diveSpeed() { return Math.min(1.7 + 0.09 * (this.stage - 1), 3.0); }
   get late() { return this.stage >= LATE_FROM; }
+  get finalPush() { return this.stage >= FINAL_PUSH_FROM; }
+  /** 적 탄 속도 배율 (후반일수록 빨라진다) */
+  get bulletMul() { return (this.late ? LATE_BULLET : 1) * (this.finalPush ? FINAL_PUSH_BULLET : 1); }
   /** 지금 틀어야 할 배경 음악 이름 (소리는 모르고 이름만 알려 준다). 타이틀·클리어·결과 화면은 조용하다 */
   get music() {
     if (this.phase === 'ending') return 'ending';
     if (['title', 'select', 'over', 'clear', 'bonusResult'].includes(this.phase)) return null;
     return this.boss ? 'boss' : this.bonus ? 'bonus' : 'stage';
   }
-  get maxDivers() { return Math.max(1, Math.min(2 + (this.stage >> 1), 6) + (this.late ? 1 : 0)); }
-  get diveInterval() { return Math.max(40, 130 - 7 * (this.stage - 1)); }
-  get maxBullets() { return 4 + Math.min(this.stage, 6); }
+  get maxDivers() { return Math.max(1, Math.min(2 + (this.stage >> 1), 6) + (this.late ? 1 : 0) + (this.finalPush ? 1 : 0)); }
+  get diveInterval() { return Math.max(34, 130 - 7 * (this.stage - 1)); }
+  get maxBullets() { return 4 + Math.min(this.stage, 9); }
 
   addScore(n) {
     this.score += n;
@@ -313,12 +320,12 @@ export class Game {
       slot: (r, c) => this.formation.slot(r, c),
       playTime: this.playTime,
       diveSpeed: this.diveSpeed,
-      shotsPerDive: this.stage >= 3 ? 2 : 1,
+      shotsPerDive: this.stage >= TRIPLE_SHOT_FROM ? 3 : this.stage >= 3 ? 2 : 1,
       fire: (e) => this.enemyFire(e),
       targetX: this.player.x,
       shoot: (x, y, a, s) => {
         if (this.bullets.length >= MAX_BULLETS_BOSS) return;
-        const v = s * (this.late ? LATE_BULLET : 1);
+        const v = s * this.bulletMul;
         this.bullets.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v });
       },
       minion: (x, y, kind) => this.spawnMinion(x, y, kind),
@@ -548,7 +555,7 @@ export class Game {
     if (dy < 20) return;
     let ang = Math.atan2(dy, dx) + (this.rng() - 0.5) * 0.3;
     ang = Math.max(Math.PI * 0.25, Math.min(Math.PI * 0.75, ang));
-    const sp = Math.min(1.5 + 0.08 * this.stage, 2.8) * (this.late ? LATE_BULLET : 1);
+    const sp = Math.min(1.5 + 0.09 * this.stage, 3.0) * this.bulletMul;
     for (const o of e.kind === 'ray' ? [-0.35, 0, 0.35] : [0]) {
       this.bullets.push({ x: e.x, y: e.y + 6, vx: Math.cos(ang + o) * sp, vy: Math.sin(ang + o) * sp });
     }

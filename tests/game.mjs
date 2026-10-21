@@ -304,12 +304,12 @@ check('보너스 스테이지에서는 맞지 않는다', gb3.phase === 'play');
 
 // 점수와 목숨
 const gx = playing([]);
-gx.addScore(19990); gx.addScore(10);
-check('20000점에 목숨 +1', gx.lives === 4);
-gx.addScore(50000);
-check('70000점에 목숨 +1', gx.lives === 5);
-gx.addScore(70000);
-check('이후 70000점마다 +1', gx.lives === 6);
+gx.addScore(29990); gx.addScore(10);
+check('30000점에 목숨 +1', gx.lives === 4);
+gx.addScore(100000);
+check('130000점에 목숨 +1', gx.lives === 5);
+gx.addScore(100000);
+check('이후 100000점마다 +1', gx.lives === 6);
 check('최고 점수가 갱신된다', gx.hiScore === gx.score);
 
 // 콤보

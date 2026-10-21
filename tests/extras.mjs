@@ -1,4 +1,4 @@
-import { Game, TICRATE, LIVES, LATE_FROM, ITEM_TYPES, ITEM_LIFE } from '../src/game/game.js';
+import { Game, TICRATE, LIVES, LATE_FROM, FINAL_PUSH_FROM, ITEM_TYPES, ITEM_LIFE } from '../src/game/game.js';
 import { Enemy } from '../src/game/enemy.js';
 import { buildStage } from '../src/game/stage.js';
 import { Player, RAPID_TICKS } from '../src/game/player.js';
@@ -22,10 +22,12 @@ function playing(enemies, { rng = seq(0.5) } = {}) {
 const gn = new Game({ bonusPlan: {} }); begin(gn);
 check('잠수함 3대로 시작', gn.lives === LIVES && LIVES === 3);
 const lateAt = (stage) => { const q = new Game({ bonusPlan: {} }); begin(q); q.stage = stage; return q; };
-check(`${LATE_FROM} 스테이지부터 동시 급강하가 하나 는다`, LATE_FROM === 11 && lateAt(11).maxDivers === Math.min(2 + (11 >> 1), 6) + 1 && lateAt(10).maxDivers === Math.min(2 + (10 >> 1), 6));
+const base = (s) => Math.min(2 + (s >> 1), 6);
+check(`${LATE_FROM} 스테이지부터 동시 급강하가 하나 는다`, LATE_FROM === 8 && lateAt(8).maxDivers === base(8) + 1 && lateAt(7).maxDivers === base(7));
+check(`${FINAL_PUSH_FROM} 스테이지부터 하나 더 는다`, FINAL_PUSH_FROM === 15 && lateAt(15).maxDivers === base(15) + 2 && lateAt(14).maxDivers === base(14) + 1);
 const bulletSpeed = (stage) => { const q = lateAt(stage); q.makeEnv().shoot(10, 10, Math.PI / 2, 2); return q.bullets[0].vy; };
-check('적 탄은 11 스테이지부터 1.1배 빠르다', Math.abs(bulletSpeed(10) - 2) < 1e-9 && Math.abs(bulletSpeed(11) - 2.2) < 1e-9);
-check('크라켄 체력은 60 (난이도 배율 없음)', (() => { const q = lateAt(5); q.startStage(); return q.boss.maxHp === 60; })());
+check('적 탄은 8 스테이지부터 1.2배, 15 스테이지부터 한 번 더 1.1배 빠르다', Math.abs(bulletSpeed(7) - 2) < 1e-9 && Math.abs(bulletSpeed(8) - 2.4) < 1e-9 && Math.abs(bulletSpeed(14) - 2.4) < 1e-9 && Math.abs(bulletSpeed(15) - 2.64) < 1e-9);
+check('크라켄 체력은 100 (스테이지 위치만 따른다)', (() => { const q = lateAt(5); q.startStage(); return q.boss.maxHp === 100; })());
 check('기록에는 난이도가 없다', (() => { const q = new Game({ bonusPlan: {} }); begin(q); q.lives = 1; q.score = 10; q.bullets.push({ x: q.player.x, y: PLAYER_Y, vx: 0, vy: 0 }); q.phase = 'play'; q.enemies = [formed()]; run(q, 100); return q.lastRecord && q.lastRecord.diff === undefined; })());
 
 // 아이템: 품은 적이 미리 정해져 있고(반짝임), 잡으면 반드시 떨어뜨린다
