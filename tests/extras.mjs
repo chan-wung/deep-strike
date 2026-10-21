@@ -1,4 +1,4 @@
-import { Game, TICRATE, DIFFICULTIES, DIFFICULTY_ORDER, ITEM_TYPES } from '../src/game/game.js';
+import { Game, TICRATE, LIVES, LATE_FROM, ITEM_TYPES, ITEM_LIFE } from '../src/game/game.js';
 import { Enemy } from '../src/game/enemy.js';
 import { buildStage } from '../src/game/stage.js';
 import { Player, RAPID_TICKS } from '../src/game/player.js';
@@ -9,9 +9,8 @@ import { check, done, seq } from './lib.mjs';
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
 const formed = (kind = 'bee', row = 3, col = 4) => { const e = new Enemy({ kind, row, col }); e.state = 'formation'; return e; };
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
-function playing(enemies, { rng = seq(0.5), difficulty } = {}) {
-  const g = new Game({ rng });
-  if (difficulty) g.setDifficulty(difficulty);
+function playing(enemies, { rng = seq(0.5) } = {}) {
+  const g = new Game({ bonusPlan: {}, rng });
   g.start();
   g.enemies = [...enemies, anchor()];
   g.phase = 'play';
@@ -19,45 +18,31 @@ function playing(enemies, { rng = seq(0.5), difficulty } = {}) {
   return g;
 }
 
-// 난이도
-const gd = new Game();
-check('기본 난이도는 보통', gd.difficulty === 'normal' && gd.cfg === DIFFICULTIES.normal);
-gd.cycleDifficulty(1);
-check('난이도 돌리기: 보통 → 어려움 → 쉬움 → 보통', gd.difficulty === 'hard' && (gd.cycleDifficulty(1), gd.difficulty === 'easy') && (gd.cycleDifficulty(1), gd.difficulty === 'normal'));
-gd.cycleDifficulty(-1);
-check('거꾸로도 돈다', gd.difficulty === 'easy' && DIFFICULTY_ORDER.join() === 'easy,normal,hard,endless' && gd.modes.join() === 'easy,normal,hard');
-gd.start();
-check('쉬움: 잠수함 4대로 시작', gd.lives === 4);
-gd.setDifficulty('hard');
-check('플레이 중에는 난이도를 못 바꾼다', gd.difficulty === 'easy');
-const gn = new Game(); gn.start();
-const gh = new Game(); gh.setDifficulty('hard'); gh.start();
-const ge = new Game(); ge.setDifficulty('easy'); ge.start();
-check('어려울수록 급강하 간격이 짧고 동시에 더 많이 덤빈다', gh.diveInterval < gn.diveInterval && gn.diveInterval < ge.diveInterval && gh.maxDivers > gn.maxDivers && gn.maxDivers > ge.maxDivers, `${ge.maxDivers}/${gn.maxDivers}/${gh.maxDivers}`);
-check('동시 급강하는 최소 1', (() => { const q = new Game(); q.setDifficulty('easy'); q.start(); q.stage = 1; return q.maxDivers >= 1; })());
-const bossHp = (d) => { const q = new Game(); q.setDifficulty(d); q.start(); q.stage = 5; q.startStage(); return q.boss.maxHp; };
-check('크라켄 체력은 난이도에 따라 48 / 60 / 78', bossHp('easy') === 48 && bossHp('normal') === 60 && bossHp('hard') === 78, `${bossHp('easy')}/${bossHp('normal')}/${bossHp('hard')}`);
-const bulletSpeed = (d) => { const q = new Game(); q.setDifficulty(d); q.start(); q.makeEnv().shoot(10, 10, Math.PI / 2, 2); return q.bullets[0].vy; };
-check('적 탄은 어려울수록 빠르다', bulletSpeed('easy') < bulletSpeed('normal') && bulletSpeed('normal') < bulletSpeed('hard') && Math.abs(bulletSpeed('normal') - 2) < 1e-9);
-const rec = (d) => { const q = new Game(); q.setDifficulty(d); q.start(); q.lives = 1; q.score = 10; q.bullets.push({ x: q.player.x, y: PLAYER_Y, vx: 0, vy: 0 }); q.phase = 'play'; q.enemies = [formed()]; run(q, 100); return q.lastRecord; };
-check('기록에 난이도가 담긴다', rec('hard').diff === 'hard' && rec('easy').diff === 'easy');
+// 난이도는 하나: 잠수함 3대, 11 스테이지부터 조금 더 어렵다
+const gn = new Game({ bonusPlan: {} }); gn.start();
+check('잠수함 3대로 시작', gn.lives === LIVES && LIVES === 3);
+const lateAt = (stage) => { const q = new Game({ bonusPlan: {} }); q.start(); q.stage = stage; return q; };
+check(`${LATE_FROM} 스테이지부터 동시 급강하가 하나 는다`, LATE_FROM === 11 && lateAt(11).maxDivers === Math.min(2 + (11 >> 1), 6) + 1 && lateAt(10).maxDivers === Math.min(2 + (10 >> 1), 6));
+const bulletSpeed = (stage) => { const q = lateAt(stage); q.makeEnv().shoot(10, 10, Math.PI / 2, 2); return q.bullets[0].vy; };
+check('적 탄은 11 스테이지부터 1.1배 빠르다', Math.abs(bulletSpeed(10) - 2) < 1e-9 && Math.abs(bulletSpeed(11) - 2.2) < 1e-9);
+check('크라켄 체력은 60 (난이도 배율 없음)', (() => { const q = lateAt(5); q.startStage(); return q.boss.maxHp === 60; })());
+check('기록에는 난이도가 없다', (() => { const q = new Game({ bonusPlan: {} }); q.start(); q.lives = 1; q.score = 10; q.bullets.push({ x: q.player.x, y: PLAYER_Y, vx: 0, vy: 0 }); q.phase = 'play'; q.enemies = [formed()]; run(q, 100); return q.lastRecord && q.lastRecord.diff === undefined; })());
 
 // 아이템: 품은 적이 미리 정해져 있고(반짝임), 잡으면 반드시 떨어뜨린다
 check('아이템은 세 종류', ITEM_TYPES.join() === 'rapid,shield,charge');
-const stageCarriers = (rngSeq, stage = 1) => { const g = new Game(); g.start(); g.stage = stage; g.startStage(); g.rng = seq(...rngSeq); g.enemies = buildStage(stage); g.assignItems(g.enemies); return g.enemies; };
+const stageCarriers = (rngSeq, stage = 1, plan = {}) => { const g = new Game({ bonusPlan: plan }); g.start(); g.stage = stage; g.startStage(); g.rng = seq(...rngSeq); g.enemies = buildStage(stage, null, plan); g.assignItems(g.enemies); return g.enemies; };
 check('품을 확률이 안 되면 아무도 안 품는다', stageCarriers([0.5]).every((e) => e.carries === null));
 check('확률이 되면 두 번째 난수로 종류가 정해진다 (이 경우 모두 방어막)', stageCarriers([0.01, 0.4]).every((e) => e.carries === 'shield'));
 check('종류는 난수에 따라 rapid / shield / charge', (() => { const e = stageCarriers([0.01, 0.0])[0], f = stageCarriers([0.01, 0.7])[0]; return e.carries === 'rapid' && f.carries === 'charge'; })());
-check('보너스 물고기는 아이템을 품지 않는다', stageCarriers([0.01, 0.4], 3).every((e) => e.carries === null));
-check('난이도가 낮을수록 품는 적이 많다 (확률 18 / 12 / 8%)', DIFFICULTIES.easy.drop > DIFFICULTIES.normal.drop && DIFFICULTIES.normal.drop > DIFFICULTIES.hard.drop);
-check('새 게임 스테이지에서 실제로 일부 적이 품고 나온다', (() => { let n = 0, x = 12345; const g = new Game({ rng: () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; } }); for (let i = 0; i < 20; i++) { g.stage = 1; g.startStage(); n += g.enemies.filter((e) => e.carries).length; } return n > 40 && n < 160; })());
+check('보너스 물고기는 아이템을 품지 않는다', stageCarriers([0.01, 0.4], 3, { 3: 'school' }).every((e) => e.carries === null));
+check('새 게임 스테이지에서 실제로 일부 적이 품고 나온다', (() => { let n = 0, x = 12345; const g = new Game({ bonusPlan: {}, rng: () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; } }); for (let i = 0; i < 20; i++) { g.stage = 1; g.startStage(); n += g.enemies.filter((e) => e.carries).length; } return n > 40 && n < 160; })());
 
 const bee = formed(); bee.carries = 'shield';
 const gi = playing([bee]);
 gi.hitEnemy(bee);
 check('아이템을 품은 적을 잡으면 반드시 떨어뜨린다 (방어막)', gi.items.length === 1 && gi.items[0].type === 'shield', JSON.stringify(gi.items));
 const y0 = gi.items[0].y; run(gi, 10);
-check('아이템은 천천히 아래로 떨어진다', gi.items.length === 1 && gi.items[0].y > y0);
+check('아이템은 천천히 아래로 흘러간다', gi.items.length === 1 && gi.items[0].y > y0);
 gi.items[0].x = gi.player.x; gi.items[0].y = PLAYER_Y;
 run(gi, 1);
 check('잠수함에 닿으면 먹는다', gi.items.length === 0 && gi.player.shield === true && gi.events.includes('pickup'));
@@ -72,7 +57,7 @@ const gdv = playing([]);
 const dvv = formed('butterfly', 1, 3); dvv.carries = 'rapid'; dvv.state = 'dive'; dvv.hp = 1; gdv.enemies.push(dvv);
 gdv.hitEnemy(dvv);
 check('급강하 중에 잡아도 떨어진다', gdv.items.length === 1 && gdv.items[0].type === 'rapid');
-const gmin = new Game({ rng: seq(0.01, 0.0, 0.5) });
+const gmin = new Game({ bonusPlan: {}, rng: seq(0.01, 0.0, 0.5) });
 gmin.start(); gmin.stage = 5; gmin.startStage(); gmin.rng = seq(0.01, 0.0, 0.5);
 gmin.spawnMinion(100, 80);
 check('크라켄이 풀어 놓는 해파리도 아이템을 품을 수 있다', gmin.enemies.length === 1 && gmin.enemies[0].carries === 'rapid');
@@ -82,13 +67,17 @@ gr.items[0].x = gr.player.x; gr.items[0].y = PLAYER_Y; run(gr, 1);
 check('연사 강화를 먹으면 남은 시간이 생긴다', gr.player.rapid > RAPID_TICKS - 5 && gr.player.rapid <= RAPID_TICKS);
 const gc = playing([formed()]); gc.enemies[0].carries = 'charge';
 gc.hitEnemy(gc.enemies[0]);
-const gauge0 = gc.gauge;
+const bombs0 = gc.bombs;
 gc.items[0].x = gc.player.x; gc.items[0].y = PLAYER_Y; run(gc, 1);
-check('해일 충전을 먹으면 게이지 +40', gc.gauge === gauge0 + 40, `gauge=${gc.gauge}`);
+check('해일 충전을 먹으면 폭탄 +1', gc.bombs === bombs0 + 1, `bombs=${gc.bombs}`);
 const gfall = playing([formed()]); gfall.enemies[0].carries = 'shield';
 gfall.hitEnemy(gfall.enemies[0]);
+gfall.collectItems = () => {};          // 우연히 닿아 먹히지 않게
 run(gfall, 400);
-check('못 먹은 아이템은 화면 밖에서 사라진다', gfall.items.length === 0);
+const bx = gfall.items[0];
+check('못 먹은 아이템은 화면 안에서 튕겨 다닌다', gfall.items.length === 1 && bx.x >= 8 && bx.x <= 216 && bx.y >= 40 && bx.y <= 280, JSON.stringify(bx));
+run(gfall, ITEM_LIFE);
+check('튕겨 다니다 시간이 지나면 사라진다', gfall.items.length === 0);
 
 // 연사 강화
 const pn = new Player(); pn.setFire(true);
@@ -122,7 +111,7 @@ check('방어막이 있으면 쌍둥이도 지킨다', gt.player.twin && !gt.pla
 
 // 돌진
 const dashRun = (stage, r) => {
-  const g = new Game();
+  const g = new Game({ bonusPlan: {} });
   g.start(); g.stage = stage; g.startStage();
   g.rng = seq(...r);
   const e = formed('bee', 3, 4); e.x = 112; e.y = 90;
@@ -150,7 +139,7 @@ check('어뢰를 쏘면 shot 이벤트', ev.events.includes('shot'));
 ev.events.length = 0;
 ev.hitEnemy(ev.enemies[0]);
 check('적을 잡으면 boom 이벤트', ev.events.includes('boom'));
-const eu = playing([formed()]); eu.events.length = 0; eu.gauge = 100; eu.ult();
+const eu = playing([formed()]); eu.events.length = 0; eu.ult();
 check('필살기는 ult 이벤트와 화면 흔들림', eu.events.includes('ult') && eu.shakeT > 0);
 const ec = playing([formed()]); ec.events.length = 0;
 for (let i = 0; i < 200; i++) ec.emit('x');
@@ -165,9 +154,9 @@ const eo = playing([formed()]); eo.lives = 1; eo.events.length = 0;
 eo.bullets.push({ x: eo.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(eo, 100);
 check('마지막 잠수함을 잃으면 gameover 이벤트', eo.events.includes('gameover'));
-const ew = new Game(); ew.start(); ew.stage = 5; ew.events.length = 0; ew.startStage();
+const ew = new Game({ bonusPlan: {} }); ew.start(); ew.stage = 5; ew.events.length = 0; ew.startStage();
 check('보스 스테이지가 시작되면 warning 이벤트', ew.events.includes('warning'));
-const eb = new Game(); eb.start(); eb.stage = 5; eb.startStage(); eb.phase = 'play'; eb.boss.y = 62; eb.boss.state = 'fight'; eb.boss.hp = 1; eb.events.length = 0;
+const eb = new Game({ bonusPlan: {} }); eb.start(); eb.stage = 5; eb.startStage(); eb.phase = 'play'; eb.boss.y = 62; eb.boss.state = 'fight'; eb.boss.hp = 1; eb.events.length = 0;
 eb.player.shots.push({ x: eb.boss.x, y: 80 }); run(eb, 1);
 check('크라켄을 쓰러뜨리면 bossdown 이벤트와 흔들림', eb.events.includes('bossdown') && eb.shakeMag === 6);
 check('TICRATE', TICRATE === 60);

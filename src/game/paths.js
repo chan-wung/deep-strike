@@ -98,3 +98,26 @@ export function zigzagPath(x, y, tx, d) {
     tx + d * 25, 230, tx, 260, tx, H + 24,
   ]));
 }
+
+/** 꺾은선 (점 목록을 직선으로 잇는다) 경로 */
+export function polyPath(points) {
+  const out = [points[0]];
+  for (let i = 1; i < points.length; i++) out.push(points[i - 1], points[i], points[i]);
+  return makePath(out, 2);
+}
+
+/** 보너스 소용돌이: (cx, cy) 근처에서 시작해 arm 방향(시작 각도)으로 나선을 그리며 화면 밖까지 퍼진다. dir 은 감는 방향(-1/1) */
+export function spiralPath(cx, cy, a0, dir) {
+  const pts = [];
+  for (let r = 6; r <= 190; r += 6) pts.push({ x: cx + Math.cos(a0 + dir * r * 0.032) * r, y: cy + Math.sin(a0 + dir * r * 0.032) * r * 0.9 });
+  return polyPath(pts);
+}
+
+/** 황금 고래: 위쪽 바다를 천천히 가로질러 갔다가 돌아온다. dir 은 처음 가는 방향(-1/1) */
+export function whalePath(dir) {
+  const xa = dir > 0 ? -30 : W + 30, xb = W - xa;
+  return makePath(pts([
+    xa, 70, xa + (xb - xa) * 0.25, 40, xa + (xb - xa) * 0.5, 110, xb, 80,
+    xb + (xa - xb) * 0.2, 150, xb + (xa - xb) * 0.6, 40, xa, 120,
+  ]));
+}

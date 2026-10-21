@@ -1,4 +1,4 @@
-import { Game, TICRATE, ULT_MAX } from '../src/game/game.js';
+import { Game, TICRATE, START_BOMBS } from '../src/game/game.js';
 import { Kraken, KRAKEN_Y } from '../src/game/kraken.js';
 import { Enemy } from '../src/game/enemy.js';
 import { isBoss, isBonus, buildStage } from '../src/game/stage.js';
@@ -9,7 +9,7 @@ const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
 const formed = (kind = 'bee', row = 3, col = 4) => { const e = new Enemy({ kind, row, col }); e.state = 'formation'; return e; };
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 function playing(enemies, { rng = seq(0.5) } = {}) {
-  const g = new Game({ rng });
+  const g = new Game({ bonusPlan: {}, rng });
   g.start();
   g.enemies = [...enemies, anchor()];
   g.phase = 'play';
@@ -18,8 +18,8 @@ function playing(enemies, { rng = seq(0.5) } = {}) {
 }
 
 // 스테이지 종류
-check('5 · 10 · 15 는 보스 스테이지', isBoss(5) && isBoss(10) && isBoss(15) && !isBoss(4));
-check('보너스는 보스와 겹치면 보스가 먼저', isBonus(3) && isBonus(7) && isBonus(11) && !isBonus(15) && isBonus(19));
+check('5 · 10 · 15 · 20 은 보스 스테이지', isBoss(5) && isBoss(10) && isBoss(15) && isBoss(20) && !isBoss(4));
+check('보너스는 보스와 겹치면 보스가 먼저', isBonus(3, { 3: 'school', 15: 'school' }) && !isBonus(15, { 3: 'school', 15: 'school' }) && !isBonus(4, { 3: 'school' }));
 check('보스 스테이지에는 대열이 없다', buildStage(5).length === 0);
 
 // 크라켄 단독
@@ -49,7 +49,7 @@ for (let i = 0; i < 121; i++) kd.step(env);
 check('쓰러지는 연출이 끝나면 dead', kd.dead && kd.state === 'dead');
 
 // 게임 속 보스 스테이지
-const gb = new Game({ rng: seq(0.5) });
+const gb = new Game({ bonusPlan: {}, rng: seq(0.5) });
 gb.start(); gb.stage = 5; gb.startStage();
 check('5 스테이지: 크라켄, 적 목록은 비어 있다, 보너스 아님', gb.boss && gb.enemies.length === 0 && !gb.bonus);
 run(gb, 2 * TICRATE + 200);
@@ -57,44 +57,44 @@ check('준비가 끝나면 크라켄이 자리를 잡고 탄을 쏜다', gb.phas
 check('보스 스테이지에 빈 enemies 로 바로 클리어되지 않는다', gb.phase === 'play');
 check('보스 스테이지에서는 납치하지 않는다', !gb.canCapture());
 
-const gh = new Game({ rng: seq(0.5) });
+const gh = new Game({ bonusPlan: {}, rng: seq(0.5) });
 gh.start(); gh.stage = 5; gh.startStage(); gh.phase = 'play';
 gh.boss.y = 62; gh.boss.state = 'fight';
 gh.player.shots.push({ x: gh.boss.x, y: gh.boss.y + 20 });
 gh.stats.shots = 1;
 const hp0 = gh.boss.hp;
 run(gh, 1);
-check('어뢰가 크라켄에 맞으면 체력 1 감소, 게이지 +1, 명중 기록', gh.boss.hp === hp0 - 1 && gh.gauge === 1 && gh.stats.hits === 1);
+check('어뢰가 크라켄에 맞으면 체력 1 감소, 명중 기록', gh.boss.hp === hp0 - 1 && gh.stats.hits === 1);
 
 // 보스 격파
-const gk = new Game({ rng: seq(0.5) });
+const gk = new Game({ bonusPlan: {}, rng: seq(0.5) });
 gk.start(); gk.stage = 5; gk.startStage(); gk.phase = 'play';
 gk.boss.y = 62; gk.boss.state = 'fight'; gk.boss.hp = 1;
 gk.bullets.push({ x: 10, y: 10, vx: 0, vy: 0 });
 gk.enemies.push(formed('bee', 3, 3));
 gk.player.shots.push({ x: gk.boss.x, y: gk.boss.y + 20 });
 run(gk, 1);
-check('격파: 5000점, 게이지 가득, 보스 격파 수, 탄과 해파리 제거', gk.score === 5000 && gk.gauge === ULT_MAX && gk.stats.bosses === 1 && gk.bullets.length === 0 && gk.enemies.length === 0, `score=${gk.score}`);
+check('격파: 5000점, 폭탄 +1, 보스 격파 수, 탄과 해파리 제거', gk.score === 5000 && gk.bombs === START_BOMBS + 1 && gk.stats.bosses === 1 && gk.bullets.length === 0 && gk.enemies.length === 0, `score=${gk.score}`);
 run(gk, 125);
 check('쓰러지는 연출 뒤 clear → 다음 스테이지', gk.phase === 'clear');
 run(gk, 2 * TICRATE + 1);
-check('6 스테이지는 보통 스테이지', gk.stage === 6 && !gk.boss && gk.enemies.length === 40 && gk.gauge === ULT_MAX);
-const g10 = new Game(); g10.start(); g10.stage = 10; g10.startStage(); g10.phase = 'play'; g10.boss.state = 'fight'; g10.boss.y = 62; g10.boss.hp = 1; g10.player.shots.push({ x: g10.boss.x, y: 80 });
+check('6 스테이지는 보통 스테이지', gk.stage === 6 && !gk.boss && gk.enemies.length === 40 && gk.bombs === START_BOMBS + 1);
+const g10 = new Game({ bonusPlan: {} }); g10.start(); g10.stage = 10; g10.startStage(); g10.phase = 'play'; g10.boss.state = 'fight'; g10.boss.y = 62; g10.boss.hp = 1; g10.player.shots.push({ x: g10.boss.x, y: 80 });
 run(g10, 1);
 check('10 스테이지 보스는 10000점', g10.score === 10000);
 
 // 필살기
 const be = formed('bee', 3, 4);
 const gu = playing([be]);
-check('게이지가 차기 전에는 못 쓴다', !gu.ultReady && gu.ult() === false);
-gu.gauge = ULT_MAX;
-check('가득 차면 쓸 수 있다', gu.ultReady);
+check('처음에는 폭탄이 기본 개수다', gu.bombs === START_BOMBS && gu.ultReady);
+gu.bombs = 0;
+check('폭탄이 없으면 못 쓴다', !gu.ultReady && gu.ult() === false);
+gu.bombs = 2;
 gu.bullets.push({ x: 100, y: 200, vx: 0, vy: 0 }, { x: 110, y: 100, vx: 0, vy: 0 }, { x: 30, y: 200, vx: 0, vy: 0 }, { x: 200, y: 100, vx: 0, vy: 0 });
 const butter = formed('butterfly', 1, 4), octo = formed('boss', 0, 4), far = formed('bee', 3, 0);
 gu.enemies.push(butter, octo, far);
-check('ult(): 게이지 0, 해일 시작, 쓴 자리의 x 를 기억', gu.ult() === true && gu.gauge === 0 && gu.wave && gu.wave.y > 288 - 1 && gu.wave.x === gu.player.x);
-check('쓰는 중에는 다시 못 쓴다', (() => { gu.gauge = ULT_MAX; return !gu.ultReady; })());
-gu.gauge = 0;
+check('ult(): 폭탄 하나 소모, 해일 시작, 쓴 자리의 x 를 기억', gu.ult() === true && gu.bombs === 1 && gu.wave && gu.wave.y > 288 - 1 && gu.wave.x === gu.player.x);
+check('쓰는 중에는 다시 못 쓴다', !gu.ultReady);
 run(gu, 25);
 check('해일은 기둥 안의 탄만 아래쪽부터 지운다 (앞면 y=148: 200 은 지워지고 100 은 남는다, 바깥 탄은 그대로)', !gu.bullets.some((b) => b.x === 100) && gu.bullets.some((b) => b.x === 110) && gu.bullets.some((b) => b.x === 30) && gu.bullets.some((b) => b.x === 200), `front=${gu.wave.y}`);
 check('해일이 지나는 동안 맞지 않는다', gu.player.invuln > 0);
@@ -103,14 +103,14 @@ check('해일이 끝나면 사라지고, 기둥 안의 체력 1 적은 잡힌다
 check('문어(체력 2)는 피해 1 로 한 번에 안 죽는다', gu.enemies.includes(octo) && octo.hp === 1);
 check('기둥 바깥의 적과 탄은 무사하다', gu.enemies.includes(far) && gu.bullets.length === 2);
 check('해일로 잡은 점수는 들어온다', gu.score === 50 + 80, `score=${gu.score}`);
-check('해일로 잡은 적은 게이지를 채우지 않는다', gu.gauge === 0);
+check('해일로 잡아도 폭탄은 늘지 않는다', gu.bombs === 1);
 
 // 해일과 크라켄: 기둥 안에 있을 때만 피해 10
 const kw = (bossX) => {
-  const g = new Game({ rng: seq(0.5) });
+  const g = new Game({ bonusPlan: {}, rng: seq(0.5) });
   g.start(); g.stage = 5; g.startStage(); g.phase = 'play';
   g.boss.state = 'fight'; g.boss.y = 74; g.boss.x = bossX;
-  g.player.x = 112; g.gauge = ULT_MAX; g.ult();
+  g.player.x = 112; g.ult();
   g.boss.step = () => {};          // 보스를 가만히 두고 해일만 본다
   run(g, 60);
   return g.boss.hp;
@@ -124,24 +124,19 @@ const s0 = gg.formation.slot(3, 4);
 gg.enemies[0].x = s0.x; gg.enemies[0].y = s0.y;
 gg.player.shots[0] = { x: s0.x, y: s0.y + 4.5 };
 run(gg, 1);
-check('일반 처치는 게이지를 채운다 (해파리 +3)', gg.gauge === 3, `gauge=${gg.gauge}`);
-const gd = playing([]);
-const dv = formed('butterfly', 1, 3); dv.state = 'dive'; dv.hp = 1; gd.enemies.push(dv);
-gd.hitEnemy(dv);
-check('급강하 중 처치는 게이지 두 배 (복어 +8)', gd.gauge === 8);
 
 const gl = playing([formed('bee', 3, 4)]);
-gl.gauge = 50;
+gl.bombs = 5;
 gl.bullets.push({ x: gl.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(gl, 1 + 91);
-check('잠수함을 잃으면 게이지도 잃는다', gl.lives === 2 && gl.gauge === 0);
+check('잠수함을 잃으면 폭탄은 기본 개수로 돌아간다', gl.lives === 2 && gl.bombs === START_BOMBS);
 
-const gbn = new Game(); gbn.start(); gbn.stage = 3; gbn.startStage(); gbn.phase = 'play'; gbn.gauge = ULT_MAX;
+const gbn = new Game({ bonusPlan: {} }); gbn.start(); gbn.stage = 3; gbn.bonusPlan = { 3: 'school' }; gbn.startStage(); gbn.phase = 'play';
 check('보너스 스테이지에서는 필살기를 못 쓴다', !gbn.ultReady && gbn.ult() === false);
 
 const gcap = playing([]);
 const bb = formed('boss', 0, 4); bb.state = 'beam'; bb.timer = 100; bb.x = gcap.player.x; bb.y = 170; bb.beamLen = 96;
-gcap.enemies.push(bb); gcap.gauge = ULT_MAX; gcap.ult();
+gcap.enemies.push(bb); gcap.ult();
 run(gcap, 2);
 check('해일 중에는 납치되지 않는다', gcap.phase === 'play');
 

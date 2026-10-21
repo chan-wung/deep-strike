@@ -10,9 +10,8 @@ const formed = (kind = 'bee', row = 3, col = 4) => { const e = new Enemy({ kind,
 /** 스테이지가 끝나지 않게 붙들어 두는 적 (영영 입장하지 않는다) */
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 /** 지금 막 play 가 된 게임 */
-function playing(enemies, { rng = seq(0.5), difficulty } = {}) {
-  const g = new Game({ rng });
-  if (difficulty) g.setDifficulty(difficulty);
+function playing(enemies, { rng = seq(0.5) } = {}) {
+  const g = new Game({ bonusPlan: {}, rng });
   g.start();
   g.enemies = [...enemies, anchor()];
   g.phase = 'play';
@@ -24,7 +23,7 @@ const slotOf = (g, e) => g.formation.slot(e.row, e.col);
 const aim = (g, e) => { const s = slotOf(g, e); g.player.shots.push({ x: s.x, y: s.y + 4.5 }); };
 
 // 흐름
-const g0 = new Game();
+const g0 = new Game({ bonusPlan: {} });
 check('처음에는 타이틀', g0.phase === 'title');
 g0.start();
 check('아무 키나 누르면 ready', g0.phase === 'ready' && g0.lives === 3 && g0.stage === 1);
@@ -78,8 +77,8 @@ const g6 = playing([formed('bee')]);
 g6.bullets.push({ x: g6.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(g6, 1);
 check('적 탄에 맞으면 dying', g6.phase === 'dying');
-run(g6, 91);
-check('잠시 뒤 목숨 하나를 잃고 다시 준비', g6.lives === 2 && g6.phase === 'ready' && g6.readyKind === 'ready');
+run(g6, 52);
+check('잠시 뒤 목숨 하나를 잃고 멈춤 없이 바로 이어진다 (3초 무적)', g6.lives === 2 && g6.phase === 'play' && g6.player.invuln > 170 && g6.player.invuln <= 180);
 const g6b = playing([formed('bee')]);
 g6b.lives = 1;
 g6b.bullets.push({ x: g6b.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
@@ -115,7 +114,7 @@ check('예비 잠수함이 있으면 납치할 수 있다', g9.canCapture() === 
 run(g9, 1);
 check('소용돌이 안에 있으면 captured', g9.phase === 'captured' && g9.capture && cb.state === 'hold');
 run(g9, 160);
-check('납치되면 목숨 하나를 잃고 다시 준비', g9.lives === 2 && g9.phase === 'ready' && g9.capture === null);
+check('납치되면 목숨 하나를 잃고 바로 이어진다', g9.lives === 2 && g9.phase === 'play' && g9.capture === null && g9.player.invuln > 0);
 check('문어는 잠수함을 데리고 대열로 돌아간다', cb.carrying && (cb.state === 'toSlot' || cb.state === 'formation'));
 run(g9, 400);
 check('납치한 문어가 대열에 자리잡는다', cb.state === 'formation' && cb.carrying);
@@ -139,50 +138,31 @@ check('구출된 잠수함이 옆에 붙어 쌍둥이', gr.player.twin && gr.res
 gr.player.setMove(1); run(gr, 400);
 check('쌍둥이도 화면 안에 머문다', gr.player.rect().x1 <= 224);
 
-// 대열에서 납치한 문어를 잡으면: 쉬움은 구출 · 보통(원작)은 잃는다 · 어려움은 적 잠수함
-const catchInFormation = (difficulty) => {
+// 대열에서 납치한 문어를 잡으면 잠수함을 잃는다 (원작 방식), 급강하 중에 잡아야 구출
+const gn = (() => {
   const b = formed('boss', 0, 4); b.hp = 1; b.carrying = true;
-  const g = playing([b], { difficulty });
+  const g = playing([b]);
   g.hitEnemy(b);
   return g;
-};
-const ge = catchInFormation('easy');
-check('쉬움: 대열에서 잡아도 잠수함이 풀려난다', ge.rescue !== null && !ge.enemies.some((e) => e.kind === 'ship'));
-for (let i = 0; i < 300 && ge.rescue; i++) ge.tick();
-check('쉬움: 구한 잠수함이 쌍둥이가 된다', ge.player.twin && ge.rescue === null);
-
-const gn = catchInFormation('normal');
-check('보통: 대열에서 잡으면 잠수함을 잃을 뿐 적이 되지는 않는다', gn.rescue === null && !gn.enemies.some((e) => e.kind === 'ship') && !gn.player.twin);
-
-const gh = catchInFormation('hard');
-check('어려움: 대열에서 잡으면 구하지 못하고 적 잠수함이 덤빈다', gh.rescue === null && gh.enemies.some((e) => e.kind === 'ship' && e.diving));
-const gs = gh.enemies.find((e) => e.kind === 'ship');
-const scoreBefore = gh.score;
-gs.hp = 1; gh.hitEnemy(gs);
-check('적 잠수함을 잡으면 100점', gh.score - scoreBefore === 100);
+})();
+check('대열에서 잡으면 잠수함을 잃을 뿐 적이 되지는 않는다', gn.rescue === null && !gn.player.twin && gn.enemies.every((e) => e.kind !== 'ship'));
 
 const hd = formed('boss', 0, 4); hd.hp = 1; hd.carrying = true; hd.state = 'dive'; hd.x = 112; hd.y = 120;
-const gdh = playing([hd], { difficulty: 'hard' });
+const gdh = playing([hd]);
 gdh.hitEnemy(hd);
-check('어려움에서도 급강하 중에 잡으면 구출', gdh.rescue !== null);
+check('급강하 중에 잡으면 구출', gdh.rescue !== null);
 
-// 납치된 잠수함을 직접 쏘면: 쉬움은 탄만 사라지고, 나머지는 잃는다
-const shootCaptive = (difficulty) => {
+// 납치된 잠수함을 직접 쏘면 잃는다
+{
   const b = formed('boss', 0, 4); b.carrying = true;
-  const g = playing([b], { difficulty });
+  const g = playing([b]);
   g.player.shots.push({ x: b.x, y: b.y - 12 });
   g.shotsVsEnemies();
-  return { g, b };
-};
-const se = shootCaptive('easy');
-check('쉬움: 납치된 잠수함을 직접 쏴도 잃지 않는다', se.b.carrying && se.g.player.shots.length === 0);
-for (const d of ['normal', 'hard']) {
-  const sc = shootCaptive(d);
-  check(`${d}: 납치된 잠수함을 직접 쏘면 잃는다`, !sc.b.carrying);
+  check('납치된 잠수함을 직접 쏘면 잃는다', !b.carrying);
 }
 
 // 출격
-const gl = new Game();
+const gl = new Game({ bonusPlan: {} });
 gl.start();
 gl.rng = seq(0.5, 0, 0.1, 0.1);
 gl.enemies = buildStage(1);
@@ -190,7 +170,7 @@ gl.enemies.forEach((e) => { e.state = 'formation'; });
 gl.phase = 'play'; gl.playTime = 1000; gl.diveTimer = 1;
 run(gl, 1);
 check('대열이 다 모이면 출격한다: 문어는 소용돌이를 펼치러 간다', gl.enemies[0].state === 'beamMove');
-const gl2 = new Game();
+const gl2 = new Game({ bonusPlan: {} });
 gl2.start();
 gl2.rng = seq(0.5, 0, 0.1, 0.1);
 gl2.lives = 1;
@@ -208,7 +188,7 @@ gk.enemies = [bs];
 aim(gk, bs); run(gk, 1);
 check('모두 처치하면 clear', gk.phase === 'clear');
 run(gk, 2 * TICRATE);
-check('다음 스테이지로 ready', gk.stage === 2 && gk.phase === 'ready' && gk.readyKind === 'stage' && gk.enemies.length === 40);
+check('다음 스테이지로 ready', gk.stage === 2 && gk.phase === 'ready' && gk.enemies.length === 40);
 
 const gt = playing([]);
 gt.player.twin = true;
@@ -217,17 +197,16 @@ gt.startStage();
 check('쌍둥이는 다음 스테이지에도 이어진다', gt.player.twin);
 
 // 보너스 스테이지
-const gb = new Game();
-gb.start(); gb.stage = 3; gb.startStage();
-check('3 스테이지는 보너스 (물고기 40마리)', gb.bonus && gb.enemies.length === 40);
+const bonusGame = (kind, stage = 3) => { const g = new Game({ bonusPlan: {}, rng: seq(0.3, 0.7, 0.5) }); g.start(); g.stage = stage; g.bonusPlan = { [stage]: kind }; g.startStage(); return g; };
+const gb = bonusGame('school');
+check('계획된 스테이지는 보너스 (물고기 40마리)', gb.bonus && gb.enemies.length === 40);
 gb.phase = 'play';
 for (const e of [...gb.enemies]) { e.state = 'enter'; e.y = 100; e.hp = 1; gb.hitEnemy(e); }
 run(gb, 1);
 check('보너스 40마리를 모두 맞히면 퍼펙트 10000점', gb.phase === 'bonusResult' && gb.result.perfect && gb.score === 4000 + 10000, `score=${gb.score}`);
 run(gb, 4 * TICRATE);
 check('결과를 보여 준 뒤 4 스테이지', gb.stage === 4 && !gb.bonus && gb.phase === 'ready');
-const gb2 = new Game();
-gb2.start(); gb2.stage = 3; gb2.startStage(); gb2.phase = 'play';
+const gb2 = bonusGame('school'); gb2.phase = 'play';
 gb2.enemies.slice(0, 10).forEach((e) => { e.state = 'enter'; e.y = 100; e.hp = 1; gb2.hitEnemy(e); });
 gb2.enemies.forEach((e) => { e.state = 'gone'; });
 run(gb2, 1);
@@ -237,6 +216,91 @@ gb3.bonus = true;
 gb3.bullets.push({ x: gb3.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(gb3, 1);
 check('보너스 스테이지에서는 맞지 않는다', gb3.phase === 'play');
+
+// 보너스 패턴별로 시작·진행·끝
+{
+  const gv = bonusGame('vortex'); gv.phase = 'play';
+  check('소용돌이: 물고기 40마리', gv.bonus && gv.bonusKind === 'vortex' && gv.enemies.length === 40 && gv.bonusTotal === 40);
+  const gt = bonusGame('target'); gt.phase = 'play';
+  check('표적: 30개', gt.bonusKind === 'target' && gt.enemies.length === 30 && gt.bonusTotal === 30);
+  run(gt, 40);
+  const shown = gt.enemies.filter((e) => e.state === 'stay');
+  check('표적은 차례로 나타난다', shown.length >= 1 && shown.length < 30);
+  for (const e of [...gt.enemies]) { if (e.state === 'wait') e.state = 'stay'; e.hp = 1; gt.hitEnemy(e); }
+  run(gt, 1);
+  check('표적을 모두 맞히면 퍼펙트', gt.phase === 'bonusResult' && gt.result.perfect && gt.result.kind === 'target' && gt.result.total === 30);
+
+  const gw = bonusGame('whale'); gw.phase = 'play';
+  const wh = gw.enemies[0];
+  check('고래: 한 마리, 체력 24', gw.bonusKind === 'whale' && gw.enemies.length === 1 && wh.hp === 24 && gw.bonusTotal === 24);
+  wh.state = 'enter'; wh.y = 100; gw.hitEnemy(wh);
+  check('고래는 맞을 때마다 50점, 죽지 않는다', gw.score === 50 && wh.hp === 23 && gw.bonusKills === 1 && wh.flash > 0);
+  for (let i = 0; i < 22; i++) gw.hitEnemy(wh);
+  check('마지막 한 방 전까지 쓰러지지 않는다', wh.hp === 1 && wh.state !== 'gone');
+  gw.hitEnemy(wh);
+  run(gw, 1);
+  check('고래를 쓰러뜨리면 점수 1000 + 퍼펙트', gw.phase === 'bonusResult' && gw.result.perfect && gw.score === 24 * 50 + 1000 + 10000, `score=${gw.score}`);
+
+  const gp = bonusGame('pearl'); gp.phase = 'play';
+  check('진주: 적은 없고 24개를 흘려보낸다', gp.bonusKind === 'pearl' && gp.enemies.length === 0 && gp.pearlsLeft === 24 && gp.bonusTotal === 24);
+  run(gp, 1);
+  check('진주는 바로 끝나지 않는다', gp.phase === 'play' && gp.pearlsLeft > 0);
+  run(gp, 26 * 4);
+  check('진주는 일정 간격으로 나온다', gp.pearlsLeft <= 21 && gp.items.filter((i) => i.type === 'pearl').length >= 2);
+  const it = gp.items.find((i) => i.type === 'pearl');
+  it.x = gp.player.x; it.y = PLAYER_Y;
+  const s0 = gp.score;
+  gp.collectItems();
+  check('진주를 줍으면 100점, 줍기만 하면 된다', gp.score === s0 + 100 && gp.bonusKills === 1);
+  const gp2 = bonusGame('pearl'); gp2.phase = 'play'; gp2.player.invuln = 1e9;
+  gp2.collectItems = () => {};
+  for (let i = 0; i < 24 * 30 + 500 && gp2.phase === 'play'; i++) gp2.tick();
+  check('진주를 하나도 못 주워도 시간이 지나면 끝난다', gp2.phase === 'bonusResult' && gp2.result.hits === 0 && !gp2.result.perfect, gp2.phase);
+}
+
+// 죽어도 끊기지 않는다: 터지는 동안만 잠깐, 곧바로 3초 무적으로 이어진다
+{
+  const g = playing([formed()]);
+  g.bullets.push({ x: g.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
+  run(g, 1);
+  check('맞으면 잠수함이 터진다', g.phase === 'dying');
+  run(g, 50);
+  check('터지는 연출은 1초가 안 된다', g.phase === 'play' && g.lives === 2);
+  check('되살아나도 3초 동안 맞지 않는다', g.player.invuln === 180);
+  g.bullets.push({ x: g.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
+  run(g, 5);
+  check('무적 중에는 맞아도 죽지 않는다', g.phase === 'play' && g.lives === 2);
+  g.setFire(true); g.setMove(1);
+  const x0 = g.player.x;
+  run(g, 10);
+  check('되살아난 직후에도 움직이고 쏠 수 있다', g.player.x > x0 && g.player.shots.length > 0);
+  run(g, 190);
+  check('3초가 지나면 무적이 풀린다', g.player.invuln === 0);
+}
+{
+  const g = playing([]);
+  g.enemies = []; g.phase = 'play';
+  g.setMove(1);
+  run(g, 2);
+  check('모든 적을 잡으면 스테이지 클리어', g.phase === 'clear');
+  const x0 = g.player.x;
+  run(g, 20);
+  check('스테이지를 깬 뒤에도 움직인다', g.player.x > x0);
+  g.setMove(0);
+  g.items.push({ x: g.player.x, y: PLAYER_Y, type: 'shield', vx: 0, vy: 0, t: 0 });
+  run(g, 1);
+  check('스테이지를 깬 뒤에도 아이템을 먹는다', g.player.shield === true && g.items.length === 0);
+  run(g, 2 * TICRATE);
+  check('다음 스테이지 준비 중에도 있던 자리에서 이어 간다', g.phase === 'ready' && Math.abs(g.player.x - x0) < 60 && g.player.shield === true);
+  g.items.push({ x: g.player.x, y: PLAYER_Y, type: 'rapid', vx: 0, vy: 0, t: 0 });
+  run(g, 1);
+  check('스테이지 준비 중에도 아이템을 먹는다', g.player.rapid > 0);
+}
+{
+  const g = bonusGame('pearl'); g.phase = 'bonusResult'; g.timer = 4 * TICRATE;
+  g.setMove(1); const x0 = g.player.x; run(g, 10);
+  check('보너스 결과 화면에서도 움직인다', g.player.x > x0);
+}
 
 // 점수와 목숨
 const gx = playing([]);

@@ -1,6 +1,6 @@
 import { Enemy, inBeam, BEAM_TICKS, BEAM_MAX } from '../src/game/enemy.js';
 import { Formation } from '../src/game/formation.js';
-import { H } from '../src/game/paths.js';
+import { H, whalePath } from '../src/game/paths.js';
 import { buildStage, isBonus, BONUS_FISH } from '../src/game/stage.js';
 import { check, done } from './lib.mjs';
 
@@ -32,11 +32,15 @@ const fish = new Enemy({ kind: 'fish', delay: 0, entry: 2, slotless: true, bonus
 run(fish, 3000);
 check('보너스 물고기는 경로 끝에서 사라진다', fish.state === 'gone');
 
-const ship = new Enemy({ kind: 'ship', slotless: true });
-ship.x = 100; ship.y = 100;
-ship.beginDive(env(), 100, 1);
-run(ship, 3000);
-check('적이 된 잠수함은 화면 밖에서 사라진다', ship.state === 'gone');
+const tgt = new Enemy({ kind: 'fish', delay: 0, slotless: true, bonus: true, at: { x: 90, y: 80 }, stay: 30 });
+run(tgt, 1);
+check('표적은 정해진 자리에 나타난다', tgt.state === 'stay' && tgt.x === 90 && tgt.y === 80 && tgt.hittable);
+run(tgt, 40);
+check('표적은 정해진 시간 뒤에 사라진다', tgt.state === 'gone');
+const whale = new Enemy({ kind: 'whale', delay: 0, slotless: true, bonus: true, path: whalePath(1), speed: 0.35 });
+check('황금 고래는 체력이 많고 몸이 크다', whale.hp === 24 && (whale.rect().x1 - whale.rect().x0) > 30);
+run(whale, 6000);
+check('황금 고래도 경로 끝에서 사라진다', whale.state === 'gone');
 
 const boss = new Enemy({ kind: 'boss', row: 0, col: 3 });
 boss.state = 'formation'; boss.step(env());
@@ -64,8 +68,8 @@ const st1 = buildStage(1);
 check('스테이지 1: 40마리 5웨이브', st1.length === 40 && new Set(st1.map((x) => x.wave)).size === 5);
 check('종류별 수', st1.filter((x) => x.kind === 'boss').length === 4 && st1.filter((x) => x.kind === 'butterfly').length === 16 && st1.filter((x) => x.kind === 'bee').length === 20);
 check('웨이브는 시간차로 들어온다', st1[0].delay < st1[8].delay && st1[8].delay < st1[39].delay);
-check('보너스 스테이지는 3 · 7 · 11', isBonus(3) && isBonus(7) && isBonus(11) && !isBonus(4) && !isBonus(1));
-const b = buildStage(3);
+check('보너스 스테이지는 계획에 든 스테이지뿐', isBonus(7, { 7: 'school' }) && !isBonus(3, { 7: 'school' }) && !isBonus(5, { 5: 'school' }));
+const b = buildStage(7, null, { 7: 'school' });
 check('보너스 스테이지: 물고기 40마리, 모두 슬롯 없음', b.length === BONUS_FISH && b.every((x) => x.kind === 'fish' && x.slotless && x.bonus));
 check('화면 높이', H === 288);
 done();

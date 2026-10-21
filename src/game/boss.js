@@ -1,7 +1,7 @@
 import { W } from './paths.js';
 import { overlap } from './geom.js';
 
-/** 5 · 10 · 15 ... 스테이지의 보스 번호 (1부터) */
+/** 5 · 10 · 15 · 20 스테이지의 보스 번호 (1부터) */
 export const bossIndex = (stage) => Math.max(1, Math.round(stage / 5));
 export const BOSS_HOME_Y = 74;
 

@@ -25,7 +25,7 @@ export class Player {
 
   /** keepTwin: 다음 스테이지로 넘어갈 때처럼 쌍둥이와 아이템 효과를 이어 간다 */
   reset(keepTwin = false) {
-    this.x = W / 2;
+    this.x = keepTwin ? this.x : W / 2;             // 다음 스테이지로 넘어갈 때는 있던 자리에서 이어 간다
     this.twin = keepTwin ? this.twin : false;
     this.rapid = keepTwin ? this.rapid : 0;         // 연사 강화 남은 틱
     this.shield = keepTwin ? this.shield : false;   // 방어막: 한 번 맞는 것을 막는다
@@ -37,9 +37,10 @@ export class Player {
     this.shots = [];
     this.cooldown = 0;
     this.invuln = 0;
-    this.move = 0;
-    this.target = null;       // 터치로 끌고 있을 때 가려는 x
-    this.firing = false;
+    this.quiet = false;       // true 면 맞지 않는 동안에도 깜빡이지 않는다 (방어막이 깨진 직후)
+    this.move ??= 0;          // 키 입력 상태는 게임 상태가 아니라서 잠수함을 잃어도 이어 간다
+    this.target ??= null;     // 터치로 끌고 있을 때 가려는 x
+    this.firing ??= false;
   }
 
   get speed() { return SPEED + this.boost * BOOST_STEP; }
@@ -129,7 +130,7 @@ export class Player {
       this.x += Math.max(-speed * 1.8, Math.min(speed * 1.8, dx));
     }
     this.x = Math.max(8, Math.min(this.maxX, this.x));
-    if (this.invuln > 0) this.invuln--;
+    if (this.invuln > 0 && --this.invuln === 0) this.quiet = false;
     if (this.rapid > 0) this.rapid--;
     if (this.weaponT > 0 && --this.weaponT === 0) this.weapon = 'torpedo';
     this.moveShots(targets);

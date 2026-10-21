@@ -3,7 +3,7 @@ import { drawSub, FONT } from './render.js';
 
 const CW = 600, CH = 315;
 
-/** 공유용 기록 카드 (600×315). rec: { score, stage, ratio, bosses, diff, date } */
+/** 공유용 기록 카드 (600×315). rec: { score, stage, ratio, bosses, date } */
 export function makeCard(rec) {
   const c = document.createElement('canvas');
   c.width = CW; c.height = CH;
@@ -39,7 +39,7 @@ export function makeCard(rec) {
   const who = rec.name && rec.name !== '---' ? `${rec.name}  ·  ` : '';
   label(`${who}${t('hud.score')}`, 36, 120, 16, '#9fd8ff');
   label(String(rec.score), 36, 182, 60, '#ffffff');
-  label(`${t('hud.stage', { n: rec.stage })}  ·  ${t('card.ratio')} ${rec.ratio}%  ·  ${t(`diff.${rec.diff || 'normal'}`)}`, 36, 226, 20, '#ffffff');
+  label(`${t('hud.stage', { n: rec.stage })}  ·  ${t('card.ratio')} ${rec.ratio}%`, 36, 226, 20, '#ffffff');
   if (rec.cleared) label(`★ ${t('card.allclear')}`, 36, 258, 18, '#ffd23f');
   else if (rec.bosses > 0) label(t('card.bosses', { n: rec.bosses }), 36, 258, 18, '#ff9fb0');
   if (rec.date) label(rec.date, 36, 292, 14, '#9fd8ff');

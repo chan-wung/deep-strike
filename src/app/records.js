@@ -1,9 +1,8 @@
 import { t } from './i18n.js';
 
-/** 내 기록: 모드(쉬움·보통·어려움·무한)마다 점수 높은 순으로 상위 10개만 남긴다 */
+/** 내 기록: 점수 높은 순으로 상위 10개만 남긴다 */
 export const MAX_RECORDS = 10;
 export const MAX_NAME = 8;
-export const MODES = ['easy', 'normal', 'hard', 'endless'];
 /** 이름이 없는 옛 기록에 붙는 이름 */
 export const NO_NAME = '---';
 
@@ -21,46 +20,23 @@ const clean = (r) => ({
   stage: r.stage,
   ratio: Number.isFinite(r.ratio) ? r.ratio : 0,
   bosses: Number.isFinite(r.bosses) ? r.bosses : 0,
-  diff: MODES.includes(r.diff) ? r.diff : 'normal',
   cleared: r.cleared === true,
   date: typeof r.date === 'string' ? r.date : '',
 });
 
 const top = (a) => a.filter(valid).map(clean).sort((x, y) => y.score - x.score).slice(0, MAX_RECORDS);
 
-/** 저장된 문자열을 기록 목록 하나로. 깨졌거나 없으면 빈 목록 */
-export function parseRecords(json) {
-  try {
-    const a = JSON.parse(json);
-    return Array.isArray(a) ? top(a) : [];
-  } catch { return []; }
-}
-
-export const emptyBoards = () => Object.fromEntries(MODES.map((m) => [m, []]));
-
 /**
- * 저장된 문자열을 모드별 점수판으로. 예전에는 모든 기록이 한 배열이었으니
- * 배열이 오면 기록에 적힌 난이도대로 나누어 담는다.
+ * 저장된 문자열을 점수판으로. 예전에는 난이도마다 따로 있었으니(배열 하나이거나 난이도별 객체)
+ * 어느 쪽이든 모든 기록을 합쳐 점수 높은 순 상위 10개만 남긴다
  */
 export function parseBoards(json) {
-  const boards = emptyBoards();
   try {
     const data = JSON.parse(json);
-    if (Array.isArray(data)) {
-      for (const m of MODES) boards[m] = top(data.filter((r) => r && (MODES.includes(r.diff) ? r.diff : 'normal') === m));
-    } else if (data && typeof data === 'object') {
-      for (const m of MODES) if (Array.isArray(data[m])) boards[m] = top(data[m]);
-    }
+    if (Array.isArray(data)) return top(data);
+    if (data && typeof data === 'object') return top(Object.values(data).filter(Array.isArray).flat());
   } catch { /* 깨진 저장값은 빈 점수판 */ }
-  return boards;
-}
-
-/** 클리어한 난이도 목록 (저장값에서) */
-export function parseClears(json) {
-  try {
-    const a = JSON.parse(json);
-    return Array.isArray(a) ? a.filter((m) => MODES.includes(m) && m !== 'endless') : [];
-  } catch { return []; }
+  return [];
 }
 
 /**

@@ -1,10 +1,11 @@
 import { Game } from '../src/game/game.js';
 import { Enemy, KINDS } from '../src/game/enemy.js';
 import { SHAPES, SHAPE_ORDER } from '../src/game/formation.js';
-import { buildStage, regularIndex, shapeName, mixCounts, entryPattern, isBoss, isBonus } from '../src/game/stage.js';
+import { buildStage, regularIndex, shapeName, mixCounts, entryPattern, isBoss, isBonus, pickBonusPlan, BONUS_KINDS, DEFAULT_PLAN } from '../src/game/stage.js';
 import { createBoss, BOSS_CLASSES } from '../src/game/bosses.js';
 import { Kraken } from '../src/game/kraken.js';
 import { Angler, DARK_LEN, LUNGE_DEPTH } from '../src/game/angler.js';
+import { Leviathan } from '../src/game/leviathan.js';
 import { Manta, CURTAIN_SLOTS, CURTAIN_GAP, curtainX } from '../src/game/manta.js';
 import { BOSS_HOME_Y } from '../src/game/boss.js';
 import { PLAYER_Y } from '../src/game/player.js';
@@ -12,12 +13,13 @@ import { H, W } from '../src/game/paths.js';
 import { setLang, t } from '../src/app/i18n.js';
 import { check, done, seq } from './lib.mjs';
 
+const OLD = { 3: 'school', 7: 'school', 11: 'school' };      // 예전 고정 보너스 자리
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
 const count = (list, kind) => list.filter((e) => e.kind === kind).length;
 const formed = (kind = 'bee', row = 3, col = 4) => { const e = new Enemy({ kind, row, col }); e.state = 'formation'; return e; };
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 function playing(enemies, { stage = 1, rng = seq(0.5) } = {}) {
-  const g = new Game();                // 난수열은 만든 뒤에 심는다 (생성·시작이 난수를 쓰기 때문)
+  const g = new Game({ bonusPlan: {} });                // 난수열은 만든 뒤에 심는다 (생성·시작이 난수를 쓰기 때문)
   g.start(); g.stage = stage; g.startStage();
   g.rng = rng;
   g.enemies = [...enemies, anchor()];
@@ -34,8 +36,8 @@ for (const name of SHAPE_ORDER) {
   check(`${name}: 5줄, 40칸, 윗줄은 가운데 4칸, 칸 번호는 0~9 에 겹치지 않는다`,
     rows.length === 5 && total === 40 && rows[0].join() === '3,4,5,6' && rows.every((r) => new Set(r).size === r.length && r.every((c) => c >= 0 && c <= 9)), `${name}=${total}`);
 }
-check('보통 스테이지 순번: 1,2,4,6,8,9,12 → 0..6 (3·7·11 은 보너스, 5·10·15 는 보스라 세지 않는다)', [1, 2, 4, 6, 8, 9, 12].map(regularIndex).join() === '0,1,2,3,4,5,6');
-check('스테이지마다 모양이 바뀐다 (직사각형 → 피라미드 → 역삼각형 → 다이아몬드 → 날개 → 다시)', [1, 2, 4, 6, 8, 9, 12].map(shapeName).join() === 'rect,pyramid,vee,diamond,wings,rect,pyramid');
+check('보통 스테이지 순번: 1,2,4,6,8,9,12 → 0..6 (3·7·11 은 보너스, 5·10·15 는 보스라 세지 않는다)', [1, 2, 4, 6, 8, 9, 12].map((s) => regularIndex(s, OLD)).join() === '0,1,2,3,4,5,6');
+check('스테이지마다 모양이 바뀐다 (직사각형 → 피라미드 → 역삼각형 → 다이아몬드 → 날개 → 다시)', [1, 2, 4, 6, 8, 9, 12].map((s) => shapeName(s, OLD)).join() === 'rect,pyramid,vee,diamond,wings,rect,pyramid');
 
 // 스테이지 구성
 for (const s of [1, 2, 4, 6, 8, 9, 12, 13, 14, 16, 17, 18, 22, 40]) {
@@ -49,7 +51,7 @@ for (const s of [1, 2, 4, 6, 8, 9, 12, 13, 14, 16, 17, 18, 22, 40]) {
 check('스테이지 1 은 전과 같은 구성 (문어 4 · 복어 16 · 해파리 20)', (() => { const l = buildStage(1); return count(l, 'boss') === 4 && count(l, 'butterfly') === 16 && count(l, 'bee') === 20; })());
 check('새 적의 수: 스테이지 1 은 없고 2 부터 뱀장어', (() => { const m1 = mixCounts(1), m2 = mixCounts(2); return Object.values(m1).every((v) => v === 0) && m2.eel === 4 && m2.ray === 0; })());
 check('가오리는 4, 거북은 6, 폭탄 복어는 8 스테이지부터', (() => { const a = mixCounts(4), b = mixCounts(6), c = mixCounts(8); return a.ray === 3 && a.turtle === 0 && b.turtle === 2 && b.mine === 0 && c.mine === 3; })());
-check('스테이지가 오를수록 새 적이 늘어난다 (최대치까지)', (() => { const a = mixCounts(8), b = mixCounts(40); return a.eel === 7 && a.ray === 5 && a.turtle === 3 && b.eel === 10 && b.ray === 8 && b.turtle === 6 && b.mine === 8; })());
+check('스테이지가 오를수록 새 적이 늘어난다 (최대치까지)', (() => { const a = mixCounts(8), b = mixCounts(40); return a.eel === 7 && a.ray === 5 && a.turtle === 3 && b.eel === 12 && b.ray === 10 && b.turtle === 8 && b.mine === 10; })());
 for (const s of [2, 4, 6, 8, 9, 12, 14]) {
   const l = buildStage(s), m = mixCounts(s);
   check(`스테이지 ${s}: 만들어진 새 적의 수가 mixCounts 와 같다`, ['eel', 'ray', 'turtle', 'mine'].every((k) => count(l, k) === m[k]));
@@ -67,13 +69,13 @@ check('스테이지 1 입장 경로 0,1,2,3,0 · 스테이지 2 는 1,0,3,2,1 (�
   return w(1) === '0,1,2,3,0' && w(2) === '1,0,3,2,1';
 })());
 check('스테이지 4: 둘로 갈라 들어오는 웨이브는 홀수 번째가 반대쪽 경로', (() => {
-  const l = buildStage(4), p = entryPattern(4);
+  const l = buildStage(4, null, OLD), p = entryPattern(4, OLD);
   const w1 = l.filter((e) => e.wave === 1);
   return p.dual[1] === 1 && w1.filter((_, i) => i % 2 === 0).every((e) => e.entry === 2) && w1.filter((_, i) => i % 2 === 1).every((e) => e.entry === 3)
     && l.filter((e) => e.wave === 0).every((e) => e.entry === 0);
 })());
 check('입장 간격이 패턴마다 다르다 (스테이지 1: 10틱, 2: 8틱, 4: 12틱)', (() => {
-  const gap = (s) => { const l = buildStage(s); return l[1].delay - l[0].delay; };
+  const gap = (s) => { const l = buildStage(s, null, OLD); return l[1].delay - l[0].delay; };
   return gap(1) === 10 && gap(2) === 8 && gap(4) === 12;
 })());
 
@@ -158,14 +160,14 @@ check('편대 급강하: 12 스테이지는 다섯 마리', squad(12, [0, 0.9, 0
 check('편대는 서로 다른 갈래로 내려온다', (() => { const g = playing(bees(6), { stage: 6, rng: seq(0, 0.9, 0.95, 0.0) }); g.enemies.pop(); g.launch(); const ends = g.enemies.filter((e) => e.state === 'dive').map((e) => Math.round(e.path.points.at(-1).x)); return new Set(ends).size === 3; })());
 
 // 보스 3종
-check('보스는 크라켄 → 아귀 → 가오리 순서로 돌아간다', (() => {
-  const k = [5, 10, 15, 20, 25, 30].map((s) => createBoss(s).kind).join();
-  return k === 'kraken,angler,manta,kraken,angler,manta' && BOSS_CLASSES.length === 3;
+check('보스는 크라켄 → 아귀 → 가오리 → 리바이어던 순서다', (() => {
+  const k = [5, 10, 15, 20].map((s) => createBoss(s).kind).join();
+  return k === 'kraken,angler,manta,leviathan' && BOSS_CLASSES.length === 4 && createBoss(20) instanceof Leviathan;
 })());
 check('보스 번호가 오를수록 체력이 크다', createBoss(5).maxHp === 60 && createBoss(10).maxHp === 90 && createBoss(15).maxHp === 120 && createBoss(20).maxHp === 150);
 check('보스 이름 문구가 영어·한국어에 모두 있다', (() => {
   const out = [];
-  for (const lang of ['en', 'ko']) { setLang(lang); for (const s of [5, 10, 15]) { const b = createBoss(s); out.push(t(b.nameKey) !== b.nameKey); } }
+  for (const lang of ['en', 'ko']) { setLang(lang); for (const s of [5, 10, 15, 20]) { const b = createBoss(s); out.push(t(b.nameKey) !== b.nameKey); } }
   setLang('en');
   return out.every(Boolean);
 })());
@@ -241,19 +243,62 @@ const gmt = playing([formed()], { stage: 15 });
 gmt.spawnMinion(100, 80, 'mine');
 check('게임: 보스가 풀어 놓은 폭탄 복어는 탄 없이 덤벼든다', gmt.enemies.some((e) => e.kind === 'mine' && e.state === 'dive' && e.shotsLeft === 0));
 
-// 1~30 스테이지를 자동으로 돌려도 멈추지 않는다
+// 1~20 스테이지와 보너스 패턴 5종을 자동으로 돌려도 멈추지 않는다
 let crashed = null;
-for (let s = 1; s <= 30 && !crashed; s++) {
+const cases = [...Array.from({ length: 20 }, (_, i) => [i + 1, null]), ...BONUS_KINDS.map((k) => [3, k])];
+for (const [s, kind] of cases) {
+  if (crashed) break;
   try {
-    const g = new Game({ rng: seq(0.2, 0.7, 0.4, 0.9, 0.1) });
-    g.start(); g.stage = s; g.startStage();
+    const g = new Game({ bonusPlan: {}, rng: seq(0.2, 0.7, 0.4, 0.9, 0.1) });
+    g.start(); g.stage = s; if (kind) g.bonusPlan = { [s]: kind }; g.startStage();
     g.player.invuln = 1e9;
     g.setFire(true);
-    for (let i = 0; i < 1800; i++) { g.moveTo(40 + (i % 140)); g.tick(); if (g.phase === 'over') break; }
-    if (!['play', 'ready', 'clear', 'bonusResult', 'captured', 'dying'].includes(g.phase)) crashed = `stage ${s} phase=${g.phase}`;
-    if (g.enemies.some((e) => !Number.isFinite(e.x) || !Number.isFinite(e.y))) crashed = `stage ${s} NaN`;
-  } catch (err) { crashed = `stage ${s}: ${err.message}`; }
+    for (let i = 0; i < 3000; i++) { g.moveTo(40 + (i % 140)); g.tick(); if (g.phase === 'over') break; }
+    if (!['play', 'ready', 'clear', 'bonusResult', 'captured', 'dying', 'over'].includes(g.phase)) crashed = `stage ${s} ${kind || ''} phase=${g.phase}`;
+    if (g.enemies.some((e) => !Number.isFinite(e.x) || !Number.isFinite(e.y))) crashed = `stage ${s} ${kind || ''} NaN`;
+  } catch (err) { crashed = `stage ${s} ${kind || ''}: ${err.message}`; }
 }
-check('스테이지 1~30 을 자동으로 돌려도 오류·NaN 없이 진행된다', crashed === null, crashed || '');
-check('상수', H === 288 && isBoss(5) && isBonus(3));
+check('스테이지 1~20 과 보너스 5종을 자동으로 돌려도 오류·NaN 없이 진행된다', crashed === null, crashed || '');
+check('상수', H === 288 && isBoss(5) && isBoss(20) && isBonus(7) && isBonus(17) && !isBonus(3));
+check('기본 보너스 계획은 구간마다 하나', Object.keys(DEFAULT_PLAN).join() === '7,17');
+for (let seed = 0; seed < 60; seed++) {
+  const r = (() => { let x = seed * 7919 + 13; return () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; }; })();
+  const plan = pickBonusPlan(r), st = Object.keys(plan).map(Number);
+  if (!(st.length === 2 && st[0] >= 2 && st[0] <= 9 && st[1] >= 12 && st[1] <= 19 && !st.some(isBoss) && new Set(Object.values(plan)).size === 2 && Object.values(plan).every((k) => BONUS_KINDS.includes(k)))) { check('보너스 계획: 구간마다 하나, 보스 제외, 패턴이 서로 다르다', false, JSON.stringify(plan)); break; }
+  if (seed === 59) check('보너스 계획: 구간마다 하나, 보스 제외, 패턴이 서로 다르다 (60판)', true);
+}
+const plans = new Set(Array.from({ length: 40 }, (_, i) => JSON.stringify(pickBonusPlan(() => ((i * 0.618 + 0.07) % 1)))));
+check('판마다 보너스 계획이 달라진다', plans.size > 5);
+const bk = (kind, rng = null) => buildStage(3, rng, { 3: kind });
+check('보너스 물고기 떼: 40마리', bk('school').length === 40 && bk('school', seq(0.3, 0.6, 0.1, 0.8)).every((e) => e.kind === 'fish'));
+check('보너스 소용돌이: 40마리가 나선 경로로', bk('vortex').length === 40 && bk('vortex').every((e) => e.customPath));
+check('보너스 표적: 30개, 제자리에서 잠깐 나타난다', bk('target').length === 30 && bk('target').every((e) => e.at && e.stay > 0));
+check('보너스 고래: 한 마리', bk('whale').length === 1 && bk('whale')[0].kind === 'whale');
+check('보너스 진주: 적 없음 (진주는 게임이 흘려보낸다)', bk('pearl').length === 0);
+check('물고기 떼는 난수를 주면 매번 다르다', JSON.stringify(bk('school', seq(0.1, 0.5, 0.9)).map((e) => [e.entry, e.delay])) !== JSON.stringify(bk('school', seq(0.9, 0.2, 0.4)).map((e) => [e.entry, e.delay])));
+
+// 리바이어던 (마지막 보스)
+const lv = new Leviathan(20); lv.state = 'fight'; lv.t = 1;
+check('리바이어던: 체력 150, 크기가 크다', lv.maxHp === 150 && lv.halfW >= 44);
+{
+  const e = stubEnv(); lv.fight(e);
+  const e2 = stubEnv(); for (let i = 0; i < 300; i++) lv.fight(e2);
+  check('리바이어던 1단계: 조준탄과 장막을 쏜다', e2.shots.length > 10 && e2.minions.length === 0);
+  const l2 = new Leviathan(20); l2.state = 'fight'; l2.hp = Math.floor(l2.maxHp * 0.5);
+  const e3 = stubEnv(); for (let i = 0; i < 400; i++) l2.fight(e3);
+  check('리바이어던 2단계: 고리를 쏘고 해파리를 풀어 놓는다', e3.shots.length > e2.shots.length && e3.minions.some((m) => m.kind === 'bee'));
+  const l3 = new Leviathan(20); l3.state = 'fight'; l3.hp = Math.floor(l3.maxHp * 0.2); l3.lungeCd = 1;
+  const e4 = stubEnv(); l3.fight(e4);
+  check('리바이어던 3단계: 돌진을 시작하고 돌진 중에는 몸에 닿으면 맞는다', !!l3.lunge && l3.contact({ x0: l3.x - 5, x1: l3.x + 5, y0: l3.y - 5, y1: l3.y + 5 }));
+  check('돌진 중에는 쏘지 않는다', e4.shots.length === 0);
+  let deepest = 0; const e5 = stubEnv(); for (let i = 0; i < 200 && l3.lunge; i++) { l3.fight(e5); deepest = Math.max(deepest, l3.y); }
+  check('돌진한 뒤 제자리로 돌아온다', !l3.lunge && l3.y < 100 && deepest > 150);
+  const l4 = new Leviathan(20); l4.state = 'fight'; l4.hp = Math.floor(l4.maxHp * 0.2); l4.spawnCd = 1; l4.volley = 0;
+  const e6 = stubEnv(); l4.fight(e6);
+  check('리바이어던 3단계: 폭탄 복어도 떨어뜨린다', e6.minions.some((m) => m.kind === 'mine'));
+}
+const shufA = buildStage(1, seq(0.1, 0.9, 0.3, 0.7, 0.5, 0.2, 0.8)), shufB = buildStage(1, seq(0.9, 0.1, 0.6, 0.4, 0.2, 0.8, 0.3));
+const sig = (l) => JSON.stringify(l.map((e) => [e.row, e.col, e.entry, e.delay]));
+check('난수를 주면 입장 순서가 달라진다', sig(shufA) !== sig(shufB) && sig(shufA) !== sig(buildStage(1)));
+check('섞어도 구성은 같다 (문어 4 · 복어 16 · 해파리 20)', count(shufA, 'boss') === 4 && count(shufA, 'butterfly') === 16 && count(shufA, 'bee') === 20);
 done();

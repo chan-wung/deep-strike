@@ -1,16 +1,16 @@
 import { H, ENTRY_PATHS, BONUS_PATHS, divePath, beamPath, sweepPath, zigzagPath, pathAt, makePath } from './paths.js';
 
-/** score: 대열에 있을 때 · dive: 급강하 중일 때 · gauge: 잡았을 때 차는 필살기 게이지(급강하 중이면 두 배) */
+/** score: 대열에 있을 때 · dive: 급강하 중일 때 */
 export const KINDS = {
-  bee: { score: 50, dive: 100, hp: 1, gauge: 3 },          // 해파리
-  butterfly: { score: 80, dive: 160, hp: 1, gauge: 4 },    // 복어
-  boss: { score: 150, dive: 400, hp: 2, gauge: 8 },        // 문어
-  fish: { score: 100, dive: 100, hp: 1, gauge: 0 },        // 보너스 물고기
-  eel: { score: 100, dive: 200, hp: 1, gauge: 4 },          // 전기뱀장어: 화면을 가로로 가로지른다
-  ray: { score: 120, dive: 240, hp: 1, gauge: 5 },          // 가오리: 지그재그로 내려오며 3갈래 탄
-  turtle: { score: 200, dive: 400, hp: 3, gauge: 6 },       // 거북: 체력 3, 느리지만 단단하다
-  mine: { score: 100, dive: 200, hp: 1, gauge: 4 },         // 폭탄 복어: 잡으면 사방으로 탄이 터진다
-  ship: { score: 100, dive: 100, hp: 1, gauge: 3 },         // 구하지 못하고 적이 된 잠수함 (어려움)
+  bee: { score: 50, dive: 100, hp: 1 },          // 해파리
+  butterfly: { score: 80, dive: 160, hp: 1 },    // 복어
+  boss: { score: 150, dive: 400, hp: 2 },        // 문어
+  fish: { score: 100, dive: 100, hp: 1 },        // 보너스 물고기
+  whale: { score: 1000, dive: 1000, hp: 24, rx: 22, ry: 11 },   // 보너스 황금 고래: 맞을 때마다 점수, 쓰러뜨리면 크게
+  eel: { score: 100, dive: 200, hp: 1 },          // 전기뱀장어: 화면을 가로로 가로지른다
+  ray: { score: 120, dive: 240, hp: 1 },          // 가오리: 지그재그로 내려오며 3갈래 탄
+  turtle: { score: 200, dive: 400, hp: 3 },       // 거북: 체력 3, 느리지만 단단하다
+  mine: { score: 100, dive: 200, hp: 1 },         // 폭탄 복어: 잡으면 사방으로 탄이 터진다
 };
 export const SPD = { enter: 2.4, toSlot: 2.6, exit: 2.6, bonus: 2.7 };
 export const BEAM_TICKS = 170;
@@ -30,8 +30,12 @@ let nextId = 1;
  * 대열이 없는 적(slotless: 보너스 물고기·보스가 풀어 놓은 졸개·적이 된 잠수함)은 화면 밖으로 나가면 gone.
  */
 export class Enemy {
-  constructor({ kind, row = 0, col = 0, wave = 0, delay = 0, entry = 0, slotless = false, bonus = false }) {
+  constructor({ kind, row = 0, col = 0, wave = 0, delay = 0, entry = 0, slotless = false, bonus = false, path = null, at = null, stay = 0, speed = 1 }) {
     Object.assign(this, { id: nextId++, kind, row, col, wave, delay, entry, slotless, bonus });
+    this.customPath = path;    // 보너스 패턴이 정해 준 입장 경로 (없으면 entry 번 경로)
+    this.at = at;              // 있으면 경로를 따라가지 않고 이 자리 {x, y} 에 stay 틱 동안 나타났다 사라진다 (표적)
+    this.stay = stay;
+    this.pathSpeed = speed;
     this.hp = KINDS[kind].hp;
     this.state = 'wait';
     this.x = -100; this.y = -100; this.a = Math.PI / 2;
@@ -44,25 +48,34 @@ export class Enemy {
     this.timer = 0;
     this.beamLen = 0;
     this.speedMul = 1;         // 돌진(dash) 급강하는 더 빠르다
+    this.flash = 0;            // 맞았을 때 번쩍이는 남은 틱 (황금 고래)
     this.carries = null;       // 품고 있는 아이템 종류. 화면에서 반짝이고, 잡으면 반드시 떨어뜨린다
   }
 
   get diving() { return DIVING.has(this.state); }
   get hittable() { return this.state !== 'wait' && this.state !== 'gone' && this.y > 0; }
-  rect() { return { x0: this.x - ENEMY_R, x1: this.x + ENEMY_R, y0: this.y - ENEMY_R, y1: this.y + ENEMY_R }; }
+  rect() {
+    const { rx = ENEMY_R, ry = ENEMY_R } = KINDS[this.kind];
+    return { x0: this.x - rx, x1: this.x + rx, y0: this.y - ry, y1: this.y + ry };
+  }
 
   /** env: { slot(row, col), playTime, diveSpeed, fire(e) } */
   step(env) {
+    if (this.flash > 0) this.flash--;
     switch (this.state) {
       case 'wait':
         if (env.playTime < this.delay) return;
-        this.path = (this.bonus ? BONUS_PATHS : ENTRY_PATHS)[this.entry];
+        if (this.at) { this.x = this.at.x; this.y = this.at.y; this.timer = this.stay; this.state = 'stay'; break; }
+        this.path = this.customPath || (this.bonus ? BONUS_PATHS : ENTRY_PATHS)[this.entry];
         this.d = 0;
         this.state = 'enter';
         this.follow(0);
         break;
+      case 'stay':
+        if (--this.timer <= 0) this.state = 'gone';
+        break;
       case 'enter':
-        this.d += this.bonus ? SPD.bonus : SPD.enter;
+        this.d += (this.bonus ? SPD.bonus : SPD.enter) * this.pathSpeed;
         if (this.follow(this.d)) this.state = this.bonus ? 'gone' : 'toSlot';
         break;
       case 'toSlot': {

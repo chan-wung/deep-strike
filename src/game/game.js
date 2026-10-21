@@ -4,22 +4,32 @@ import { Formation } from './formation.js';
 import { Enemy, KINDS, inBeam } from './enemy.js';
 import { createBoss } from './bosses.js';
 import { Player, PLAYER_Y, TWIN_GAP, RAPID_TICKS, UPGRADE_MAX } from './player.js';
-import { buildStage, isBonus, isBoss, BONUS_FISH } from './stage.js';
+import { buildStage, isBonus, isBoss, bonusKind, pickBonusPlan, BONUS_FISH, BONUS_TARGETS, BONUS_WHALE_HP, BONUS_PEARLS } from './stage.js';
 import { WEAPONS, UPGRADES, WEAPON_DEF, pickItem, pickWeapon } from './weapons.js';
-import { addRecord, cleanName, emptyBoards, qualifies, MODES } from '../app/records.js';
+import { addRecord, cleanName, qualifies } from '../app/records.js';
 
 export const TICRATE = 60;
 const START_LIVES = 3;
 const PERFECT_BONUS = 10000;
-/** 엔딩: 이 스테이지(거대 가오리)를 쓰러뜨리면 끝난다. 무한 모드만 계속된다 */
-export const FINAL_STAGE = 15;
+/** 황금 고래를 한 번 맞힐 때 받는 점수 */
+const WHALE_HIT_SCORE = 50;
+/** 진주 하나의 점수와 진주가 떠다니는 시간 */
+const PEARL_SCORE = 100;
+const PEARL_LIFE = 420;
+const PEARL_GAP = 26;
+/** 엔딩: 이 스테이지의 보스를 쓰러뜨리면 끝난다 */
+export const FINAL_STAGE = 20;
+/** 이 스테이지부터 적 탄이 조금 빨라지고 동시 급강하가 하나 늘어난다 */
+export const LATE_FROM = 11;
+const LATE_BULLET = 1.1;
 /** 엔딩에서 남은 잠수함 한 대마다 주는 점수 */
 const CLEAR_BONUS_PER_LIFE = 10000;
 /** 엔딩이 나온 뒤 이만큼 지나야 키로 넘길 수 있다 */
 export const ENDING_SKIP = 2 * TICRATE;
 const BOSS_SCORE = 5000;
 /** 필살기(해일): 게이지가 가득 차면 쓴다. 바닥에서 위로 쓸어 올라가며 탄을 지우고 적에게 피해를 준다 */
-export const ULT_MAX = 100;
+export const START_BOMBS = 3;
+export const MAX_BOMBS = 6;
 const WAVE_SPEED = 6;
 const WAVE_DAMAGE = 1;
 const WAVE_BOSS_DAMAGE = 10;
@@ -29,33 +39,27 @@ const MAX_BULLETS_BOSS = 48;
 const MAX_MINIONS = 6;
 /** 게임 오버 결과 화면이 나온 뒤 이만큼 지나야 키로 다시 시작한다 (연타하다 결과를 못 보는 일을 막는다) */
 export const OVER_LOCK = TICRATE;
-/** 잠수함을 잃고 되살아난 뒤(준비 연출이 끝난 직후) 맞지 않는 시간 */
-const RESPAWN_INVULN = 90;
+/** 잠수함을 잃고 곧바로 되살아난 뒤 맞지 않는 시간 (3초, 깜빡인다) */
+const RESPAWN_INVULN = 3 * TICRATE;
+/** 잠수함이 터지는 연출 시간 (이 동안 세상은 계속 움직인다) */
+const DYING_TICKS = 50;
 
-/**
- * 난이도: lives 시작 잠수함 수 · bullet 적 탄 속도 배율 · interval 급강하 간격 배율 · divers 동시 급강하 수 가감 · drop 아이템 확률 · bossHp 보스 체력 배율
- * captive 는 납치한 문어를 잡았을 때의 규칙: free 언제 잡아도 구출 · lost 급강하 중에만 구출(대열에서 잡으면 잃는다, 원작 방식) · hostile 대열에서 잡으면 적 잠수함이 되어 덤빈다
- * endless 는 15 스테이지에서 끝나지 않고 계속되는 무한 모드 (어려움과 같은 설정). 세 난이도를 모두 깬 뒤에만 고를 수 있다
- */
-const HARD = { lives: START_LIVES, bullet: 1.2, interval: 0.75, divers: 1, drop: 0.08, bossHp: 1.3, captive: 'hostile' };
-export const DIFFICULTIES = {
-  easy: { lives: 4, bullet: 0.85, interval: 1.3, divers: -1, drop: 0.18, bossHp: 0.8, captive: 'free' },
-  normal: { lives: START_LIVES, bullet: 1, interval: 1, divers: 0, drop: 0.12, bossHp: 1, captive: 'lost' },
-  hard: HARD,
-  endless: { ...HARD, endless: true },
-};
-export const DIFFICULTY_ORDER = MODES;
-/** 이 셋을 모두 깨면 무한 모드가 열린다 */
-export const CLEAR_TO_UNLOCK = ['easy', 'normal', 'hard'];
+/** 시작 잠수함 수 · 적을 잡았을 때 아이템을 품은 적의 비율 */
+export const LIVES = START_LIVES;
+const ITEM_DROP = 0.12;
 
 /** 아이템: 적을 잡으면 가끔 떨어진다. rapid 연사 강화 · shield 방어막(한 번 막기) · charge 해일 게이지 +40 */
 export const ITEM_TYPES = ['rapid', 'shield', 'charge'];
-const ITEM_FALL = 1.1;
+/** 아이템은 화면 안을 튕겨 다니다가 ITEM_LIFE 틱 뒤에 사라진다 (마지막 2초는 깜빡) */
+const ITEM_VX = 1.5;
+const ITEM_VY = 1.2;
+export const ITEM_LIFE = 600;
+export const ITEM_BLINK = 120;
+const ITEM_MIN_Y = 40;
 /** 폭발 어뢰가 터지는 반경 */
 const BLAST_RADIUS = 18;
 /** 영구 강화를 이미 최대로 올렸을 때 아이템을 먹으면 받는 점수 */
 const MAXED_UPGRADE_SCORE = 1000;
-const CHARGE_AMOUNT = 40;
 /** 돌진 급강하가 나오기 시작하는 스테이지 */
 const DASH_FROM = 4;
 /** 편대 급강하(같은 종류 두세 마리가 함께 내려온다)가 나오기 시작하는 스테이지 */
@@ -72,58 +76,36 @@ const nearestMates = (e, pool, kind, n) => pool
  * phase: title → ready → play → (dying | captured → ready | over) / (clear | bonusResult → ready)
  *        마지막 보스(FINAL_STAGE)를 쓰러뜨리면 clear → ending → over
  * lives 는 지금 타는 잠수함까지 센 숫자다 (화면에는 lives - 1 개를 예비로 보여 준다)
- * 점수판은 모드(쉬움·보통·어려움·무한)마다 따로 있다 (boards). over 에서 점수판에 오를 점수면 naming 이 켜져 이름을 받는다
+ * 점수판은 하나다 (records). over 에서 점수판에 오를 점수면 naming 이 켜져 이름을 받는다
  */
 export class Game {
-  constructor({ rng = Math.random } = {}) {
+  /** bonusPlan: 보너스 스테이지 계획을 고정한다 (테스트용). 없으면 판마다 난수로 뽑는다 */
+  constructor({ rng = Math.random, bonusPlan = null } = {}) {
     this.rng = rng;
+    this.fixedPlan = bonusPlan;
     this.player = new Player();
     this.formation = new Formation();
     this.phase = 'title';
     this.hiScore = 0;           // 지금 모드의 최고 점수
     this.frame = 0;
     this.paused = false;
-    this.boards = emptyBoards();   // 모드별 내 기록 (main 이 저장소에서 읽어 채운다)
-    this.clears = new Set();       // 엔딩을 본 난이도 (main 이 저장소에서 읽어 채운다)
+    this.records = [];             // 내 기록 (main 이 저장소에서 읽어 채운다)
     this.naming = false;
     this.rank = null;
-    this.rankMode = null;
-    this.difficulty = 'normal';
     this.events = [];           // 효과음용 이벤트 이름. main 이 매 프레임 비운다
     this.shakeT = 0; this.shakeMax = 1; this.shakeMag = 0;
     this.newGame();
     this.phase = 'title';
   }
 
-  get cfg() { return DIFFICULTIES[this.difficulty]; }
-
-  /** 쉬움·보통·어려움을 모두 깼나 */
-  get endlessUnlocked() { return CLEAR_TO_UNLOCK.every((d) => this.clears.has(d)); }
-  /** 고를 수 있는 모드: 무한은 열린 뒤에만 */
-  get modes() { return this.endlessUnlocked ? DIFFICULTY_ORDER : CLEAR_TO_UNLOCK; }
-  /** 타이틀·게임 오버 화면 (난이도를 고르고 새 판을 시작하는 상태) */
+  /** 타이틀·게임 오버 화면 (새 판을 시작하는 상태) */
   get idle() { return this.phase === 'title' || this.phase === 'over'; }
   /** 이번 판 명중률 (0~100) */
   get hitRatio() {
     const { shots, hits } = this.stats;
     return shots ? Math.min(100, Math.round(hits / shots * 100)) : 0;
   }
-  /** 지금 모드의 내 기록 */
-  get records() { return this.boards[this.difficulty]; }
   syncHi() { this.hiScore = this.records[0]?.score || 0; }
-
-  /** 타이틀·게임 오버 화면에서만 바꾼다 (이름을 쓰는 중에는 안 된다). 다음 새 게임부터 적용 */
-  setDifficulty(name) {
-    if (!Object.hasOwn(DIFFICULTIES, name) || this.naming || !this.idle) return;
-    if (name === 'endless' && !this.endlessUnlocked) return;
-    this.difficulty = name;
-    this.syncHi();
-  }
-  cycleDifficulty(step = 1) {
-    const { modes } = this;
-    const i = Math.max(0, modes.indexOf(this.difficulty));
-    this.setDifficulty(modes[(i + step + modes.length) % modes.length]);
-  }
 
   emit(name) { if (this.events.length < 64) this.events.push(name); }
   /** 화면 흔들림: mag 픽셀로 t 틱 동안 점점 잦아든다 */
@@ -132,14 +114,14 @@ export class Game {
   newGame() {
     this.paused = false;
     this.score = 0;
-    this.lives = this.cfg.lives;
+    this.lives = LIVES;
     this.stage = 1;
     this.extraAt = 20000;
-    this.gauge = 0;
+    this.bombs = START_BOMBS;
+    this.bonusPlan = this.fixedPlan ?? pickBonusPlan(this.rng);   // 이번 판의 보너스 스테이지 { 스테이지: 패턴 }
     this.stats = { shots: 0, hits: 0, bosses: 0 };
     this.lastRecord = null;     // 게임 오버·엔딩 때 한 번 만들어지는 기록 (이름을 받아 submitName 으로 점수판에 넣는다)
     this.rank = null;
-    this.rankMode = null;
     this.naming = false;
     this.cleared = false;
     this.ending = null;
@@ -148,14 +130,17 @@ export class Game {
   }
 
   startStage() {
-    this.boss = isBoss(this.stage) ? createBoss(this.stage, this.cfg.bossHp) : null;
-    this.enemies = this.boss ? [] : buildStage(this.stage);
+    this.boss = isBoss(this.stage) ? createBoss(this.stage) : null;
+    this.bonusKind = bonusKind(this.stage, this.bonusPlan);
+    this.enemies = this.boss ? [] : buildStage(this.stage, this.rng, this.bonusPlan);
     this.assignItems(this.enemies);
     this.wave = null;
     this.items = [];
     this.shakeT = 0;
     if (this.boss) this.emit('warning');
-    this.bonus = isBonus(this.stage);
+    this.bonus = isBonus(this.stage, this.bonusPlan);
+    this.pearlsLeft = this.bonusKind === 'pearl' ? BONUS_PEARLS : 0;       // 아직 흘려보내지 않은 진주
+    this.pearlCd = 30;
     this.formation = new Formation();
     this.bullets = [];
     this.popups = [];
@@ -168,7 +153,6 @@ export class Game {
     this.diveTimer = 90;
     this.player.reset(true);
     this.phase = 'ready';
-    this.readyKind = 'stage';
     this.timer = 2 * TICRATE;
   }
 
@@ -190,13 +174,12 @@ export class Game {
   resume() { this.paused = false; }
   togglePause() { if (this.paused) this.resume(); else this.pause(); }
 
-  get gaugeFull() { return this.gauge >= ULT_MAX; }
-  /** 지금 필살기를 쓸 수 있나 (보너스 스테이지에서는 못 쓴다) */
-  get ultReady() { return this.phase === 'play' && !this.paused && !this.bonus && !this.wave && this.gaugeFull; }
+  /** 지금 필살기를 쓸 수 있나 (폭탄이 있어야 하고, 보너스 스테이지에서는 못 쓴다) */
+  get ultReady() { return this.phase === 'play' && !this.paused && !this.bonus && !this.wave && this.bombs > 0; }
 
   ult() {
     if (!this.ultReady) return false;
-    this.gauge = 0;
+    this.bombs--;
     const { player } = this;
     this.wave = { x: player.x + (player.twin ? TWIN_GAP / 2 : 0), y: H + 10, hit: new Set(), boss: false };
     this.emit('ult');
@@ -204,11 +187,12 @@ export class Game {
     return true;
   }
 
-  addGauge(n) { this.gauge = Math.min(ULT_MAX, this.gauge + n); }
+  addBomb(n = 1) { this.bombs = Math.min(MAX_BOMBS, this.bombs + n); }
 
   get diveSpeed() { return Math.min(1.7 + 0.08 * (this.stage - 1), 2.8); }
-  get maxDivers() { return Math.max(1, Math.min(2 + (this.stage >> 1), 6) + this.cfg.divers); }
-  get diveInterval() { return Math.max(40, 130 - 7 * (this.stage - 1)) * this.cfg.interval; }
+  get late() { return this.stage >= LATE_FROM; }
+  get maxDivers() { return Math.max(1, Math.min(2 + (this.stage >> 1), 6) + (this.late ? 1 : 0)); }
+  get diveInterval() { return Math.max(40, 130 - 7 * (this.stage - 1)); }
   get maxBullets() { return 4 + Math.min(this.stage, 6); }
 
   addScore(n) {
@@ -233,11 +217,9 @@ export class Game {
     switch (this.phase) {
       case 'ready':
         this.moveWorld();
-        this.player.step(false);
-        if (--this.timer <= 0) {
-          this.phase = 'play';
-          if (this.readyKind === 'ready') this.player.invuln = RESPAWN_INVULN;   // 되살아난 직후 보스의 돌진 따위에 곧바로 또 죽지 않게
-        }
+        this.player.step(false);                 // 스테이지가 시작되기 전에도 움직일 수 있고 아이템도 먹는다
+        this.collectItems();
+        if (--this.timer <= 0) this.phase = 'play';
         break;
       case 'play': this.play(); break;
       case 'dying':
@@ -248,9 +230,10 @@ export class Game {
       case 'captured': this.capturedTick(); break;
       case 'clear':
         this.moveWorld();
-        this.player.moveShots();
+        this.player.step(false);                 // 스테이지를 깬 뒤에도 움직이고 아이템을 먹는다
+        this.collectItems();
         if (--this.timer <= 0) {
-          if (this.stage === FINAL_STAGE && !this.cfg.endless) this.allClear();
+          if (this.stage === FINAL_STAGE) this.allClear();
           else { this.stage++; this.startStage(); }
         }
         break;
@@ -258,6 +241,8 @@ export class Game {
       case 'over': this.timer++; break;
       case 'bonusResult':
         this.moveWorld();
+        this.player.step(false);
+        this.collectItems();
         if (--this.timer <= 0) { this.stage++; this.startStage(); }
         break;
       default: break;
@@ -274,7 +259,7 @@ export class Game {
       targetX: this.player.x,
       shoot: (x, y, a, s) => {
         if (this.bullets.length >= MAX_BULLETS_BOSS) return;
-        const v = s * this.cfg.bullet;
+        const v = s * (this.late ? LATE_BULLET : 1);
         this.bullets.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v });
       },
       minion: (x, y, kind) => this.spawnMinion(x, y, kind),
@@ -303,8 +288,12 @@ export class Game {
     this.popups = this.popups.filter((p) => p.timer > 0);
     for (const f of this.fx) f.t++;
     this.fx = this.fx.filter((f) => f.t < f.max);
-    for (const it of this.items) it.y += ITEM_FALL;
-    this.items = this.items.filter((it) => it.y < H + 8 && !it.taken);
+    for (const it of this.items) {
+      it.x += it.vx; it.y += it.vy; it.t++;
+      if (it.x < 8 || it.x > W - 8) { it.x = Math.max(8, Math.min(W - 8, it.x)); it.vx = -it.vx; }
+      if (it.y < ITEM_MIN_Y || it.y > H - 8) { it.y = Math.max(ITEM_MIN_Y, Math.min(H - 8, it.y)); it.vy = -it.vy; }
+    }
+    this.items = this.items.filter((it) => it.t < (it.life ?? ITEM_LIFE) && !it.taken);
     if (this.shakeT > 0) this.shakeT--;
     this.enemies = this.enemies.filter((e) => e.state !== 'gone');
   }
@@ -316,6 +305,7 @@ export class Game {
     if (fired) { this.stats.shots += fired * WEAPON_DEF[player.weapon].shots; this.emit('shot'); }   // 확산탄은 알갱이 하나하나를 센다
     this.moveWorld();
     this.collectItems();
+    if (this.bonusKind === 'pearl') this.spawnPearl();
     if (this.boss) this.boss.step(this.makeEnv());
 
     if (!this.bonus && !this.boss) {
@@ -339,7 +329,7 @@ export class Game {
     this.rescueStep();
     this.enemies = this.enemies.filter((e) => e.state !== 'gone');
 
-    const cleared = this.boss ? this.boss.dead : this.enemies.length === 0;
+    const cleared = this.boss ? this.boss.dead : this.bonus ? this.bonusOver : this.enemies.length === 0;
     if (cleared) {
       this.bullets = [];
       this.wave = null;
@@ -352,8 +342,8 @@ export class Game {
   /** 일부 적은 아이템을 품고 나온다 (난이도별 확률). 미리 정해 두어 화면에서 반짝이게 하고, 잡으면 반드시 떨어뜨린다. 보너스 물고기는 제외 */
   assignItems(list) {
     for (const e of list) {
-      if (e.kind === 'fish' || this.rng() >= this.cfg.drop) continue;
-      e.carries = pickItem(this.rng, this.stage, this.difficulty);
+      if (e.bonus || this.rng() >= ITEM_DROP) continue;
+      e.carries = pickItem(this.rng, this.stage);
     }
   }
 
@@ -366,7 +356,25 @@ export class Game {
   }
 
   dropItem(x, y, type) {
-    this.items.push({ x, y, type });
+    this.items.push({ x, y, type, vx: x < W / 2 ? ITEM_VX : -ITEM_VX, vy: ITEM_VY, t: 0 });   // 가까운 벽의 반대쪽(화면 안쪽)으로 먼저 흐른다
+  }
+
+  /** 진주 줍기 보너스: 일정한 간격으로 위에서 진주를 하나씩 흘려보낸다 */
+  spawnPearl() {
+    if (this.pearlsLeft <= 0 || --this.pearlCd > 0) return;
+    this.pearlCd = PEARL_GAP;
+    this.pearlsLeft--;
+    this.items.push({ x: 20 + this.rng() * (W - 40), y: ITEM_MIN_Y, type: 'pearl', vx: (this.rng() < 0.5 ? -1 : 1) * 1.3, vy: 1.1, t: 0, life: PEARL_LIFE });
+  }
+
+  /** 보너스 스테이지가 끝났나: 적이 다 사라지고 진주도 다 흘러간 뒤 */
+  get bonusOver() {
+    return this.enemies.length === 0 && this.pearlsLeft <= 0 && !this.items.some((it) => it.type === 'pearl');
+  }
+
+  /** 이 보너스 패턴에서 채울 수 있는 만큼 (물고기 수 · 표적 수 · 고래 체력 · 진주 수) */
+  get bonusTotal() {
+    return { vortex: BONUS_FISH, target: BONUS_TARGETS, whale: BONUS_WHALE_HP, pearl: BONUS_PEARLS }[this.bonusKind] ?? BONUS_FISH;
   }
 
   /** 잠수함에 닿은 아이템을 먹는다 */
@@ -375,6 +383,13 @@ export class Game {
     for (const it of this.items) {
       if (it.taken || !overlap(boxAt(it.x, it.y, 5, 5), pr)) continue;
       it.taken = true;
+      if (it.type === 'pearl') {                                   // 보너스 진주: 줍기만 하면 된다
+        this.bonusKills++;
+        this.addScore(PEARL_SCORE);
+        this.popup(it.x, it.y - 8, String(PEARL_SCORE));
+        this.emit('pickup');
+        continue;
+      }
       if (it.type === 'rapid') this.player.rapid = RAPID_TICKS;
       else if (it.type === 'shield') this.player.shield = true;
       else if (WEAPONS.includes(it.type)) this.player.setWeapon(it.type);
@@ -382,7 +397,7 @@ export class Game {
         if (this.player[it.type] < UPGRADE_MAX) this.player[it.type]++;
         else this.addScore(MAXED_UPGRADE_SCORE);
       }
-      else this.addGauge(CHARGE_AMOUNT);
+      else this.addBomb(1);
       this.popup(it.x, it.y - 8, '', `item.${it.type}`);
       this.emit('pickup');
     }
@@ -418,7 +433,7 @@ export class Game {
     const before = b.phase;
     if (!b.damage(n)) {
       if (b.phase > before) {                       // 사나워질 때마다 이 스테이지에 나오는 무기를 하나 떨어뜨린다
-        const weapon = pickWeapon(this.rng, this.stage, this.difficulty);
+        const weapon = pickWeapon(this.rng, this.stage);
         if (weapon) this.dropItem(b.x, b.y + 24, weapon);
       }
       this.emit('bosshit');
@@ -430,17 +445,18 @@ export class Game {
     this.addScore(pts);
     this.popup(b.x, b.y, String(pts));
     this.stats.bosses++;
-    this.gauge = ULT_MAX;
+    this.addBomb(1);                                  // 보스를 쓰러뜨리면 폭탄 하나
     this.bullets = [];
     for (const e of this.enemies) { this.boom(e.x, e.y); e.state = 'gone'; }
     for (let i = 0; i < 8; i++) this.fx.push({ x: b.x + (this.rng() - 0.5) * 56, y: b.y + (this.rng() - 0.5) * 36, t: -i * 8, max: 22, kind: 'enemy' });
   }
 
   finishBonus() {
-    const perfect = this.bonusKills >= BONUS_FISH;
+    const total = this.bonusTotal;
+    const perfect = this.bonusKills >= total;
     const bonus = perfect ? PERFECT_BONUS : 0;
     this.addScore(bonus);
-    this.result = { hits: this.bonusKills, total: BONUS_FISH, perfect, bonus };
+    this.result = { hits: this.bonusKills, total, perfect, bonus, kind: this.bonusKind };
     this.emit(perfect ? 'perfect' : 'clear');
     this.phase = 'bonusResult';
     this.timer = 4 * TICRATE;
@@ -487,7 +503,7 @@ export class Game {
     if (dy < 20) return;
     let ang = Math.atan2(dy, dx) + (this.rng() - 0.5) * 0.3;
     ang = Math.max(Math.PI * 0.25, Math.min(Math.PI * 0.75, ang));
-    const sp = Math.min(1.5 + 0.08 * this.stage, 2.8) * this.cfg.bullet;
+    const sp = Math.min(1.5 + 0.08 * this.stage, 2.8) * (this.late ? LATE_BULLET : 1);
     for (const o of e.kind === 'ray' ? [-0.35, 0, 0.35] : [0]) {
       this.bullets.push({ x: e.x, y: e.y + 6, vx: Math.cos(ang + o) * sp, vy: Math.sin(ang + o) * sp });
     }
@@ -511,7 +527,7 @@ export class Game {
         continue;
       }
       const c = this.enemies.find((en) => en.carrying && overlap(sb, boxAt(en.x, en.y - 12, 6, 6)));
-      if (c) { s.dead = true; if (this.cfg.captive !== 'free') this.loseCaptive(c); }   // 납치된 잠수함을 직접 쏘면 잃는다 (쉬움은 탄만 사라진다)
+      if (c) { s.dead = true; this.loseCaptive(c); }   // 납치된 잠수함을 직접 쏘면 잃는다
     }
     player.shots = player.shots.filter((s) => !s.dead);
   }
@@ -553,11 +569,16 @@ export class Game {
 
   /** 어뢰 한 발이 보스에 맞았다 (명중 수는 호출한 쪽이 countHit 로 센다) */
   hitBoss() {
-    this.addGauge(1);
     this.damageBoss(1);
   }
 
   hitEnemy(e) {
+    if (e.kind === 'whale') {                                  // 황금 고래는 맞을 때마다 점수
+      this.bonusKills++;
+      this.addScore(WHALE_HIT_SCORE);
+      e.flash = 5;
+      this.emit('bosshit');
+    }
     if (--e.hp > 0) return;
     this.kill(e);
   }
@@ -566,7 +587,6 @@ export class Game {
   kill(e, byWave = false) {
     const info = KINDS[e.kind];
     const diving = e.diving;
-    if (!byWave) this.addGauge(info.gauge * (diving ? 2 : 1));
     let pts = diving ? info.dive : info.score;
     if (e.kind === 'boss' && diving && e.group) {
       const mates = this.enemies.filter((m) => m !== e && m.group === e.group && m.diving).length;
@@ -585,27 +605,17 @@ export class Game {
     e.state = 'gone';
   }
 
-  /** 납치한 문어가 잡혔다: 난이도 규칙(cfg.captive)에 따라 구출 · 상실 · 적 잠수함 */
+  /** 납치한 문어가 잡혔다: 급강하 중에 잡아야 구출하고, 대열에서 잡으면 잃는다 (원작 방식) */
   freeCaptive(e, diving) {
     e.carrying = false;
-    const mode = this.cfg.captive;
-    if (diving || mode === 'free') this.rescue = { x: e.x, y: e.y - 12, a: 0 };
-    else if (mode === 'hostile') this.spawnHostileShip(e);
-    else this.boom(e.x, e.y - 12);                                                    // lost: 구하지 못하고 잃는다
+    if (diving) this.rescue = { x: e.x, y: e.y - 12, a: 0 };
+    else this.boom(e.x, e.y - 12);
   }
 
   /** 납치된 잠수함을 잃는다 (직접 맞았거나 납치범이 들이받혔다) */
   loseCaptive(e) {
     e.carrying = false;
     this.boom(e.x, e.y - 12);
-  }
-
-  /** 어려움: 대열에 있는 문어를 잡으면 납치된 잠수함은 구해지지 않고 적이 되어 덤벼든다 */
-  spawnHostileShip(boss) {
-    const s = new Enemy({ kind: 'ship', slotless: true });
-    s.x = boss.x; s.y = boss.y - 12;
-    s.beginDive(this.makeEnv(), this.player.x, this.rng() < 0.5 ? -1 : 1);
-    this.enemies.push(s);
   }
 
   beamCheck() {
@@ -657,7 +667,8 @@ export class Game {
     const { player } = this;
     if (player.shield) {
       player.shield = false;
-      player.invuln = 90;
+      player.invuln = 30;                           // 방어막은 깨지는 즉시 사라지고, 깜빡임 없이 잠깐만 맞지 않는다
+      player.quiet = true;
       this.emit('shield');
       this.shake(2, 10);
       return;
@@ -672,7 +683,7 @@ export class Game {
     this.boom(player.x, PLAYER_Y, 'player');
     this.shake(4, 24);
     this.phase = 'dying';
-    this.timer = 90;
+    this.timer = DYING_TICKS;
     this.clearField();
   }
 
@@ -686,28 +697,27 @@ export class Game {
   /** 잠수함 하나를 잃었다: 남아 있으면 다시 준비, 아니면 끝 */
   loseShip() {
     this.lives--;
-    this.gauge = 0;                                   // 잠수함을 잃으면 모은 게이지도 잃는다
+    this.bombs = START_BOMBS;                         // 잠수함을 잃으면 폭탄은 처음 개수로 돌아간다
     this.clearField();
     if (this.lives <= 0) { this.finish(); return; }
     this.player.reset(false);
-    this.phase = 'ready';
-    this.readyKind = 'ready';
-    this.timer = 2 * TICRATE;
+    this.player.invuln = RESPAWN_INVULN;              // 멈추지 않고 곧바로 이어서, 3초 동안 맞지 않는다
+    this.phase = 'play';
   }
 
   /** 이번 판 기록을 만들어 둔다. 점수판에는 이름을 받은 뒤 submitName 이 넣는다 */
   buildRecord(cleared) {
     this.lastRecord = {
       score: this.score, stage: this.stage, ratio: this.hitRatio,
-      bosses: this.stats.bosses, diff: this.difficulty, cleared,
+      bosses: this.stats.bosses, cleared,
     };
   }
 
-  /** 결과 화면. 이번 모드 점수판에 오를 점수면 이름을 받는다 */
+  /** 결과 화면. 점수판에 오를 점수면 이름을 받는다 */
   enterResults() {
     this.phase = 'over';
     this.timer = 0;
-    this.naming = qualifies(this.boards[this.difficulty], this.score);
+    this.naming = qualifies(this.records, this.score);
   }
 
   /** 게임 오버 */
@@ -717,11 +727,10 @@ export class Game {
     this.emit('gameover');
   }
 
-  /** 마지막 보스를 쓰러뜨렸다: 남은 잠수함 보너스를 주고 이 난이도를 깬 것으로 친다 */
+  /** 마지막 보스를 쓰러뜨렸다: 남은 잠수함 보너스를 준다 */
   allClear() {
     const bonus = this.lives * CLEAR_BONUS_PER_LIFE;
     this.addScore(bonus);
-    this.clears.add(this.difficulty);
     this.cleared = true;
     this.ending = { bonus };
     this.buildRecord(true);
@@ -734,10 +743,9 @@ export class Game {
   submitName(name, date = '') {
     if (!this.naming || !this.lastRecord) return false;
     const rec = { ...this.lastRecord, name: cleanName(name), date };
-    const { list, rank } = addRecord(this.boards[rec.diff], rec);
-    this.boards[rec.diff] = list;
+    const { list, rank } = addRecord(this.records, rec);
+    this.records = list;
     this.rank = rank;
-    this.rankMode = rec.diff;
     this.lastRecord = rec;
     this.naming = false;
     return true;

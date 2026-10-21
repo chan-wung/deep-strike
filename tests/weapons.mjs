@@ -1,16 +1,15 @@
 import { Game } from '../src/game/game.js';
 import { Enemy } from '../src/game/enemy.js';
 import { Player, PLAYER_Y, TWIN_GAP } from '../src/game/player.js';
-import { WEAPONS, WEAPON_TICKS, itemPool, pickItem, pickWeapon, weaponFrom } from '../src/game/weapons.js';
+import { WEAPONS, WEAPON_TICKS, itemPool, pickItem, pickWeapon } from '../src/game/weapons.js';
 import { check, done, seq } from './lib.mjs';
 
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
-const kinds = (stage, d) => itemPool(stage, d).map(([k]) => k).join();
+const kinds = (stage) => itemPool(stage).map(([k]) => k).join();
 const formed = (x, y) => { const e = new Enemy({ kind: 'bee', row: 3, col: 4 }); e.state = 'formation'; e.x = x; e.y = y; return e; };
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
-function playing(enemies, difficulty) {
-  const g = new Game({ rng: seq(0.5) });
-  if (difficulty) g.setDifficulty(difficulty);
+function playing(enemies) {
+  const g = new Game({ bonusPlan: {}, rng: seq(0.5) });
   g.start();
   g.enemies = [...enemies, anchor()];
   g.phase = 'play';
@@ -18,24 +17,18 @@ function playing(enemies, difficulty) {
   return g;
 }
 
-// 분배: 스테이지·난이도에 따라 무기가 열린다
+// 분배: 스테이지에 따라 무기가 열린다
 check('무기는 다섯 종류', WEAPONS.join() === 'spread,laser,homing,blast,sonic');
-check('보통 1 스테이지는 무기 없이 기본 아이템과 영구 강화뿐', kinds(1, 'normal') === 'rapid,shield,charge,boost,velo,reload');
-check('보통: 확산 2, 레이저 4, 유도 7 스테이지부터', kinds(2, 'normal').includes('spread') && !kinds(3, 'normal').includes('laser') && kinds(4, 'normal').includes('laser') && !kinds(6, 'normal').includes('homing') && kinds(7, 'normal').includes('homing'));
-check('쉬움은 한 스테이지 일찍', weaponFrom('spread', 'easy') === 1 && weaponFrom('laser', 'easy') === 3 && weaponFrom('homing', 'easy') === 6 && kinds(1, 'easy').includes('spread'));
-check('어려움·무한은 한 스테이지 늦게', weaponFrom('spread', 'hard') === 3 && weaponFrom('laser', 'hard') === 5 && weaponFrom('laser', 'endless') === 5 && !kinds(2, 'hard').includes('spread'));
-check('난이도마다 가중치가 다르다 (쉬움은 방어막 후하게, 어려움은 레이저 많이)', (() => {
-  const w = (s, d, k) => Object.fromEntries(itemPool(s, d))[k];
-  return w(9, 'easy', 'shield') > w(9, 'hard', 'shield') && w(9, 'hard', 'laser') > w(9, 'easy', 'laser') && w(9, 'easy', 'homing') > w(9, 'hard', 'homing');
-})());
-check('pickItem: 보통 1 스테이지는 3:3:2:1:1:1 (난수 구간별)', pickItem(() => 0.1, 1, 'normal') === 'rapid' && pickItem(() => 0.5, 1, 'normal') === 'shield' && pickItem(() => 0.7, 1, 'normal') === 'charge' && pickItem(() => 0.95, 1, 'normal') === 'reload');
+check('1 스테이지는 무기 없이 기본 아이템과 영구 강화뿐', kinds(1) === 'rapid,shield,charge,boost,velo,reload');
+check('확산 2, 레이저 4, 유도 7 스테이지부터', kinds(2).includes('spread') && !kinds(3).includes('laser') && kinds(4).includes('laser') && !kinds(6).includes('homing') && kinds(7).includes('homing'));
+check('pickItem: 1 스테이지는 3:3:2:1:1:1 (난수 구간별)', pickItem(() => 0.1, 1) === 'rapid' && pickItem(() => 0.5, 1) === 'shield' && pickItem(() => 0.7, 1) === 'charge' && pickItem(() => 0.95, 1) === 'reload');
 check('pickItem: 아주 깊은 스테이지에서는 모든 종류가 나온다', (() => {
   const seen = new Set();
-  for (let i = 0; i < 200; i++) seen.add(pickItem(() => i / 200, 20, 'normal'));
+  for (let i = 0; i < 200; i++) seen.add(pickItem(() => i / 200, 20));
   return seen.size === 11;
 })());
-check('pickItem: 아직 안 열린 무기는 절대 안 나온다', (() => { for (let i = 0; i < 100; i++) if (pickItem(() => i / 100, 3, 'normal') === 'laser') return false; return true; })());
-check('pickWeapon: 무기만 고르고, 열린 무기가 없으면 null', WEAPONS.includes(pickWeapon(() => 0.5, 5, 'normal')) && pickWeapon(() => 0.5, 1, 'normal') === null && pickWeapon(() => 0.99, 5, 'normal') === 'blast');
+check('pickItem: 아직 안 열린 무기는 절대 안 나온다', (() => { for (let i = 0; i < 100; i++) if (pickItem(() => i / 100, 3) === 'laser') return false; return true; })());
+check('pickWeapon: 무기만 고르고, 열린 무기가 없으면 null', WEAPONS.includes(pickWeapon(() => 0.5, 5)) && pickWeapon(() => 0.5, 1) === null && pickWeapon(() => 0.99, 5) === 'blast');
 
 // 발사 모양
 const p = new Player();
@@ -105,11 +98,11 @@ gp.collectItems();
 check('무기 아이템을 먹으면 무기가 바뀐다', gp.player.weapon === 'laser' && gp.player.weaponT === 900 && gp.items.length === 0 && gp.popups.some((q) => q.key === 'item.laser'));
 
 // 적이 품은 아이템: 스테이지가 오르면 무기도 나온다
-const gc = new Game({ rng: seq(0.01, 0.99) }); gc.start(); gc.stage = 1; gc.startStage();
+const gc = new Game({ bonusPlan: {}, rng: seq(0.01, 0.99) }); gc.start(); gc.stage = 1; gc.startStage();
 check('1 스테이지(보통)에서 품은 적은 무기를 품지 않는다', gc.enemies.every((e) => !e.carries || !WEAPONS.includes(e.carries)));
 
 // 보스: 사나워질 때 무기를 떨어뜨린다
-const gb = new Game({ rng: seq(0.5) }); gb.start(); gb.stage = 5; gb.startStage(); gb.phase = 'play';
+const gb = new Game({ bonusPlan: {}, rng: seq(0.5) }); gb.start(); gb.stage = 5; gb.startStage(); gb.phase = 'play';
 gb.boss.state = 'fight'; gb.boss.y = 74;
 gb.damageBoss(gb.boss.maxHp - Math.floor(gb.boss.maxHp * 2 / 3) + 1);
 check('보스가 2단계가 되면 무기 하나를 떨어뜨린다', gb.boss.phase === 2 && gb.items.length === 1 && WEAPONS.includes(gb.items[0].type), JSON.stringify(gb.items));
@@ -154,7 +147,9 @@ const ps = new Player(); ps.setWeapon('sonic'); ps.setFire(true); ps.step(); ps.
 check('음파 링은 관통 탄이다', ps.shots.length === 1 && ps.shots[0].pierce === true && ps.shots[0].w === 4);
 for (let i = 0; i < 29; i++) ps.step(false);
 check('음파 링은 날아가며 넓어진다', ps.shots.length === 1 && ps.shots[0].w > 4 && ps.shots[0].w <= 14);
-ps.step(false);
-check('음파 링은 30틱 뒤에 사라진다', ps.shots.length === 0);
+const sy = ps.shots[0].y;
+check('음파 링은 보스(아래쪽 y≈98)까지 닿는다', PLAYER_Y - 8 - 3 * 60 < 98 && sy > 0);
+for (let i = 0; i < 31; i++) ps.step(false);
+check('음파 링은 60틱 뒤에 사라진다', ps.shots.length === 0);
 
 done();

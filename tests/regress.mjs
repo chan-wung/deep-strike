@@ -1,10 +1,10 @@
-import { Game, DIFFICULTIES, OVER_LOCK } from '../src/game/game.js';
+import { Game, OVER_LOCK } from '../src/game/game.js';
 import { Enemy } from '../src/game/enemy.js';
 import { check, done } from './lib.mjs';
 
 const tickUntil = (g, phase, limit = 5000) => { for (let i = 0; i < limit && g.phase !== phase; i++) g.tick(); };
 const bossGame = (stage, rng) => {
-  const g = new Game({ rng });
+  const g = new Game({ bonusPlan: {}, rng });
   g.stage = stage; g.startStage(); g.lives = 5;
   tickUntil(g, 'play');
   return g;
@@ -27,13 +27,13 @@ const lcg = (seed) => { let s = seed; return () => (s = s * 16807 % 2147483647) 
   const g = bossGame(5, lcg(1));
   g.hitPlayer(); tickUntil(g, 'play');
   check('되살아나면 잠시 무적이다', g.player.invuln > 0);
-  const s = new Game({ rng: lcg(2) }); s.start(); tickUntil(s, 'play');
+  const s = new Game({ bonusPlan: {}, rng: lcg(2) }); s.start(); tickUntil(s, 'play');
   check('스테이지 시작에는 무적을 주지 않는다', s.player.invuln === 0);
 }
 
 // 2. 클리어·사망 연출 중에도 내 어뢰는 계속 날아간다
 {
-  const g = new Game({ rng: lcg(3) }); g.start();
+  const g = new Game({ bonusPlan: {}, rng: lcg(3) }); g.start();
   tickUntil(g, 'play');
   g.setFire(true);
   for (let i = 0; i < 20; i++) g.tick();
@@ -46,7 +46,7 @@ const lcg = (seed) => { let s = seed; return () => (s = s * 16807 % 2147483647) 
   for (let i = 0; i < 60; i++) g.tick();
   check('클리어 중 어뢰가 화면 밖으로 날아가 사라진다', g.phase === 'clear' && g.player.shots.length === 0);
 
-  const d = new Game({ rng: lcg(4) }); d.start();
+  const d = new Game({ bonusPlan: {}, rng: lcg(4) }); d.start();
   tickUntil(d, 'play');
   d.setFire(true);
   for (let i = 0; i < 20; i++) d.tick();
@@ -55,17 +55,6 @@ const lcg = (seed) => { let s = seed; return () => (s = s * 16807 % 2147483647) 
   d.hitPlayer();
   d.tick();
   check('사망 연출 중 어뢰가 움직인다', d.phase === 'dying' && d.player.shots.some((s, i) => s.y < y0[i]));
-}
-
-// 3. 변조된 난이도 이름은 무시한다
-{
-  const g = new Game();
-  for (const bad of ['toString', 'constructor', '__proto__', 'hasOwnProperty', '', null, undefined]) g.setDifficulty(bad);
-  check('Object.prototype 이름으로 난이도가 바뀌지 않는다', g.difficulty === 'normal' && g.cfg === DIFFICULTIES.normal);
-  g.setDifficulty('hard');
-  check('정상 난이도는 바뀐다', g.difficulty === 'hard');
-  g.setDifficulty('toString');
-  check('변조 뒤에도 새 게임이 시작된다', (() => { try { g.newGame(); return true; } catch { return false; } })());
 }
 
 // 4. 쓰러지는 중인 보스는 더 맞지 않는다 (해일·어뢰도 가짜 보스 피격음을 내지 않는다)
@@ -83,7 +72,7 @@ const lcg = (seed) => { let s = seed; return () => (s = s * 16807 % 2147483647) 
 
 // 5. 게임 오버 직후 연타로 결과 화면을 건너뛰지 않는다
 {
-  const g = new Game({ rng: lcg(6) }); g.start();
+  const g = new Game({ bonusPlan: {}, rng: lcg(6) }); g.start();
   g.score = 100; g.finish();
   g.naming = false;
   g.start();
@@ -95,7 +84,7 @@ const lcg = (seed) => { let s = seed; return () => (s = s * 16807 % 2147483647) 
 
 // 6. 명중률: 한 발은 몇 명을 맞혀도 한 번, 확산탄은 알갱이마다 쏜 수로 센다
 {
-  const mk = () => { const g = new Game({ rng: lcg(7) }); g.start(); tickUntil(g, 'play'); g.enemies = []; g.boss = null; g.bonus = true; return g; };
+  const mk = () => { const g = new Game({ bonusPlan: {}, rng: lcg(7) }); g.start(); tickUntil(g, 'play'); g.enemies = []; g.boss = null; g.bonus = true; return g; };
   const g = mk();
   g.player.setWeapon('spread'); g.player.setFire(true); g.tick();
   check('확산탄 한 번에 세 발을 쏜 것으로 센다', g.stats.shots === 3, `shots=${g.stats.shots}`);

@@ -3,7 +3,7 @@
  *  spread : 3갈래 부채꼴
  *  laser  : 빠른 광선이 적을 꿰뚫는다 (한 발이 같은 적은 한 번만 맞힌다)
  *  homing : 가까운 적을 향해 휘어 간다
- * 어떤 아이템이 언제 나오는지(스테이지·난이도별 분배)도 여기서 정한다.
+ * 어떤 아이템이 언제 나오는지(스테이지별 분배)도 여기서 정한다.
  */
 export const WEAPONS = ['spread', 'laser', 'homing', 'blast', 'sonic'];
 export const WEAPON_TICKS = 900;
@@ -15,49 +15,34 @@ export const WEAPON_DEF = {
   laser: { shots: 1, angles: [0], speed: 8, cooldown: 9, pierce: true },
   homing: { shots: 1, angles: [0], speed: 3.4, cooldown: 9, homing: true },
   blast: { shots: 1, angles: [0], speed: 3.8, cooldown: 10, blast: true },
-  sonic: { shots: 1, angles: [0], speed: 3, cooldown: 12, pierce: true, life: 30, w0: 4 },
+  sonic: { shots: 1, angles: [0], speed: 3, cooldown: 12, pierce: true, life: 60, w0: 4 },
 };
 
 /** 영구 강화 아이템: 먹을 때마다 한 단계씩 (최대 UPGRADE_MAX), 잠수함을 잃으면 사라진다 */
 export const UPGRADES = ['boost', 'velo', 'reload'];
 
-/** 무기가 처음 나오는 스테이지 (보통 기준) */
+/** 무기가 처음 나오는 스테이지 */
 export const WEAPON_FROM = { spread: 2, laser: 4, homing: 7, blast: 5, sonic: 9 };
-/** 난이도에 따라 무기가 나오는 시점이 앞서거나 늦는다 */
-const FROM_SHIFT = { easy: -1, normal: 0, hard: 1 };
-FROM_SHIFT.endless = FROM_SHIFT.hard;                // 무한은 어려움과 같다
 
-/**
- * 아이템 가중치. 쉬우면 방어막·유도탄이 후하고, 어려우면 방어막은 짜고 레이저·해일 충전이 많다.
- * 보통의 앞 세 개(rapid·shield·charge)는 무기가 없던 때와 같은 3:3:2 다.
- */
-export const ITEM_WEIGHTS = {
-  easy: { rapid: 3, shield: 4, charge: 2, spread: 3, laser: 2, homing: 3, blast: 2, sonic: 2, boost: 2, velo: 2, reload: 2 },
-  normal: { rapid: 3, shield: 3, charge: 2, spread: 3, laser: 2, homing: 2, blast: 2, sonic: 2, boost: 1, velo: 1, reload: 1 },
-  hard: { rapid: 3, shield: 2, charge: 3, spread: 2, laser: 3, homing: 1, blast: 2, sonic: 1, boost: 1, velo: 1, reload: 1 },
-};
-ITEM_WEIGHTS.endless = ITEM_WEIGHTS.hard;            // 무한은 어려움과 같다
+/** 아이템 가중치. 앞 세 개(rapid·shield·charge)는 무기가 없던 때와 같은 3:3:2 다 */
+export const ITEM_WEIGHTS = { rapid: 3, shield: 3, charge: 2, spread: 3, laser: 2, homing: 2, blast: 2, sonic: 2, boost: 1, velo: 1, reload: 1 };
 
-/** 이 난이도에서 무기가 처음 나오는 스테이지 */
-export const weaponFrom = (weapon, difficulty) => Math.max(1, WEAPON_FROM[weapon] + (FROM_SHIFT[difficulty] ?? 0));
-
-/** 이 스테이지·난이도에서 나올 수 있는 아이템과 가중치: [[종류, 가중치], ...] */
-export function itemPool(stage, difficulty) {
-  const w = ITEM_WEIGHTS[difficulty] || ITEM_WEIGHTS.normal;
-  return Object.entries(w).filter(([type]) => !WEAPON_FROM[type] || stage >= weaponFrom(type, difficulty));
+/** 이 스테이지에서 나올 수 있는 아이템과 가중치: [[종류, 가중치], ...] */
+export function itemPool(stage) {
+  return Object.entries(ITEM_WEIGHTS).filter(([type]) => !WEAPON_FROM[type] || stage >= WEAPON_FROM[type]);
 }
 
 /** 가중치대로 하나 뽑는다 (난수 한 번) */
-export function pickItem(rng, stage, difficulty) {
-  const pool = itemPool(stage, difficulty);
+export function pickItem(rng, stage) {
+  const pool = itemPool(stage);
   let r = rng() * pool.reduce((s, [, k]) => s + k, 0);
   for (const [type, k] of pool) { if ((r -= k) < 0) return type; }
   return pool[pool.length - 1][0];
 }
 
 /** 보스가 사나워질 때 떨어뜨릴 무기 하나 (나올 수 있는 무기가 없으면 null) */
-export function pickWeapon(rng, stage, difficulty) {
-  const pool = itemPool(stage, difficulty).filter(([type]) => WEAPON_FROM[type]);
+export function pickWeapon(rng, stage) {
+  const pool = itemPool(stage).filter(([type]) => WEAPON_FROM[type]);
   if (!pool.length) return null;
   return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))][0];
 }
