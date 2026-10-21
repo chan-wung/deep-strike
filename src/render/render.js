@@ -1,8 +1,10 @@
 import { W, H } from '../game/paths.js';
 import { PLAYER_Y, TWIN_GAP } from '../game/player.js';
 import { BEAM_HALF0, BEAM_SLOPE } from '../game/enemy.js';
-import { ITEM_LIFE, ITEM_BLINK, FINAL_STAGE, WAVE_HALF_W, ENDING_SKIP, OVER_LOCK } from '../game/game.js';
+import { ITEM_LIFE, ITEM_BLINK, FINAL_STAGE, ENDING_SKIP, OVER_LOCK, COMBO_TICKS } from '../game/game.js';
 import { WEAPON_TICKS, UPGRADES } from '../game/weapons.js';
+import { SHIPS, SHIP_ORDER } from '../game/ships.js';
+import { CARPET_RADIUS, RING_TICKS } from '../game/specials.js';
 import { TAU } from '../game/geom.js';
 import { t } from '../app/i18n.js';
 
@@ -24,6 +26,35 @@ const COLOR = {
   accent: '#ffd23f',
   tide: '#35d0ff',
 };
+/** 기체별 몸 색 [몸, 어두운 부분] */
+export const SHIP_COLOR = {
+  yellow: [COLOR.sub, COLOR.subDark],
+  dart: ['#2dd4bf', '#0f766e'],
+  hammer: ['#ff8a3d', '#b04a12'],
+};
+const shipColors = (id) => SHIP_COLOR[id] ?? SHIP_COLOR.yellow;
+/** 게임 오버 결과 화면의 기체 고르기 줄: 가운데에서 이만큼 떨어진 곳에 ◀ ▶ 를 그리고, 누르는 범위는 가로 ARROW_HIT · 세로 ARROW_HIT_Y */
+const ARROW_DX = 72, ARROW_HIT = 26, ARROW_HIT_Y = 14;
+const PICK_Y = { over: 236 };
+/** 기체 고르기 화면: 카드 셋을 가로로 나란히 (w 는 카드 너비, y·h 는 세로 범위). 아래 SELECT_GO_Y 부터는 출발 버튼 */
+const CARD = { x0: 6, w: 68, gap: 4, y: 50, h: 180 };
+const SELECT_GO_Y = 240;
+/** 화면 논리 좌표 (x, y) 가 몇 번째 기체 카드 위인가 (없으면 -1) */
+export function shipCardAt(phase, x, y) {
+  if (phase !== 'select' || y < CARD.y || y > CARD.y + CARD.h) return -1;
+  const step = CARD.w + CARD.gap, i = Math.floor((x - CARD.x0) / step);
+  return i >= 0 && i < SHIP_ORDER.length && x - CARD.x0 - i * step <= CARD.w ? i : -1;
+}
+/** 기체 고르기 화면의 출발 버튼 위인가 */
+export const selectGoAt = (phase, y) => phase === 'select' && y >= SELECT_GO_Y - 2;
+/** 화면 논리 좌표 (x, y) 가 결과 화면의 기체 고르기 화살표 위인가: 왼쪽 -1 · 오른쪽 1 · 아니면 0 */
+export function shipArrowAt(phase, x, y) {
+  const row = PICK_Y[phase];
+  if (row === undefined || Math.abs(y - row) > ARROW_HIT_Y) return 0;
+  if (Math.abs(x - (W / 2 - ARROW_DX)) <= ARROW_HIT) return -1;
+  if (Math.abs(x - (W / 2 + ARROW_DX)) <= ARROW_HIT) return 1;
+  return 0;
+}
 /** 보스별 단계 색 (체력 막대와 몸 색) */
 const BOSS_COLOR = {
   kraken: ['#7a3dd8', '#d6489b', '#e5484d'],
@@ -536,37 +567,60 @@ function drawBossBar(ctx, k) {
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 5);
 }
 
-/** 필살기 해일: 바닥에서 위로 올라오는 파도 */
+/** 대해일: 화면 폭 전체의 파도가 바닥에서 위로 올라온다 */
 function drawWave(ctx, w, frame) {
   const y = w.y;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(w.x - WAVE_HALF_W, 0, WAVE_HALF_W * 2, H + 12);   // 쓴 자리의 좁은 기둥만 훑는다
-  ctx.clip();
   const g = ctx.createLinearGradient(0, y, 0, H);
-  g.addColorStop(0, 'rgba(120,220,255,.38)');
-  g.addColorStop(1, 'rgba(40,140,220,.12)');
+  g.addColorStop(0, 'rgba(120,220,255,.42)');
+  g.addColorStop(1, 'rgba(40,140,220,.16)');
   ctx.fillStyle = g;
   ctx.fillRect(0, y, W, H - y + 12);
-  ctx.fillStyle = 'rgba(225,250,255,.9)';
+  ctx.fillStyle = 'rgba(225,250,255,.92)';
   ctx.beginPath();
-  ctx.moveTo(-4, y + 10);
-  for (let x = -4; x <= W + 4; x += 6) ctx.lineTo(x, y + Math.sin(x * 0.09 + frame * 0.5) * 4);
-  ctx.lineTo(W + 4, y + 10);
+  ctx.moveTo(-4, y + 12);
+  for (let x = -4; x <= W + 4; x += 6) ctx.lineTo(x, y + Math.sin(x * 0.09 + frame * 0.5) * 5);
+  ctx.lineTo(W + 4, y + 12);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.7)';
-  for (let i = 0; i < 14; i++) {                      // 물보라
+  ctx.fillStyle = 'rgba(255,255,255,.75)';
+  for (let i = 0; i < 28; i++) {                      // 물보라
     const x = (i * 37 + frame * 3) % W;
-    ctx.beginPath(); ctx.arc(x, y - 3 - ((i * 7 + frame) % 9), 1 + (i % 2), 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y - 3 - ((i * 7 + frame) % 11), 1 + (i % 2), 0, TAU); ctx.fill();
+  }
+}
+
+/** 청록 다트의 어뢰 폭풍: 목표를 쫓아 휘어 가는 유도 어뢰들과 불꽃 꼬리 */
+function drawStorm(ctx, st) {
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const m of st.missiles) {
+    ctx.strokeStyle = 'rgba(125,243,224,.35)';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(m.x - Math.cos(m.a) * 12, m.y - Math.sin(m.a) * 12); ctx.lineTo(m.x, m.y); ctx.stroke();
+    ctx.strokeStyle = '#e8fffb';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(m.px, m.py); ctx.lineTo(m.x, m.y); ctx.stroke();
+    ctx.fillStyle = '#ffd23f';
+    ctx.beginPath(); ctx.arc(m.x, m.y, 1.8, 0, TAU); ctx.fill();
   }
   ctx.restore();
-  ctx.strokeStyle = 'rgba(190,240,255,.45)';                 // 기둥의 양옆 가장자리
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(w.x - WAVE_HALF_W, y); ctx.lineTo(w.x - WAVE_HALF_W, H);
-  ctx.moveTo(w.x + WAVE_HALF_W, y); ctx.lineTo(w.x + WAVE_HALF_W, H);
-  ctx.stroke();
+}
+
+/** 주황 해머의 심해 폭격: 터지는 자리마다 번지는 불꽃 고리 */
+function drawCarpet(ctx, st) {
+  for (const r of st.rings) {
+    const k = r.t / RING_TICKS, grow = Math.min(1, k * 2.4);
+    ctx.save();
+    ctx.globalAlpha = 1 - k;
+    ctx.fillStyle = 'rgba(255,170,70,.45)';
+    ctx.beginPath(); ctx.arc(r.x, r.y, CARPET_RADIUS * grow, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,240,200,.8)';
+    ctx.beginPath(); ctx.arc(r.x, r.y, CARPET_RADIUS * 0.55 * grow, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#ffe2b0';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(r.x, r.y, CARPET_RADIUS * grow, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
 }
 
 const ITEM_STYLE = {
@@ -621,14 +675,15 @@ function drawFx(ctx, f) {
 function drawPlayer(ctx, game) {
   const { player, frame } = game;
   const cx = player.x + (player.twin ? TWIN_GAP / 2 : 0), r = player.twin ? 17 : 11;
-  const protectedByWave = !!game.wave;
+  const protectedByWave = !!game.wave;                              // 필살기가 진행되는 동안은 맞지 않는다
+  const [body, dark] = shipColors(player.ship);
   if (player.invuln > 0 && !protectedByWave && !player.shield && !player.quiet && (frame >> 2) % 2) return;   // 맞은 직후에는 깜빡인다
   if (player.rapid > 0 && (player.rapid > 120 || (frame >> 2) % 2)) {                        // 연사 강화: 노란 기운 (끝나 가면 깜빡)
     ctx.fillStyle = 'rgba(255,210,63,.2)';
     ctx.beginPath(); ctx.arc(cx, PLAYER_Y, r + 2, 0, TAU); ctx.fill();
   }
-  drawSub(ctx, player.x, PLAYER_Y, COLOR.sub, COLOR.subDark, frame);
-  if (player.twin) drawSub(ctx, player.x + TWIN_GAP, PLAYER_Y, COLOR.sub, COLOR.subDark, frame);
+  drawSub(ctx, player.x, PLAYER_Y, body, dark, frame);
+  if (player.twin) drawSub(ctx, player.x + TWIN_GAP, PLAYER_Y, body, dark, frame);
   if (player.shield || protectedByWave) {                                                    // 방어막(해일 중에도 보호됨)
     ctx.strokeStyle = protectedByWave ? 'rgba(200,245,255,.8)' : `rgba(95,227,255,${0.8 + 0.2 * Math.sin(frame * 0.2)})`;
     ctx.fillStyle = 'rgba(95,227,255,.22)';
@@ -650,6 +705,18 @@ function drawShots(ctx, game) {
       ctx.fillRect(s.x - 1.4, s.y - 12, 2.8, 24);
       ctx.fillStyle = '#fff';
       ctx.fillRect(s.x - 0.6, s.y - 12, 1.2, 24);
+    } else if (s.kind === 'needle') {                  // 청록 다트: 가늘고 빠른 바늘
+      ctx.fillStyle = rapid ? '#d8fff7' : '#7df3e0';
+      ctx.fillRect(s.x - 0.7, s.y - 5, 1.4, 10);
+      ctx.fillStyle = 'rgba(125,243,224,.35)';
+      ctx.fillRect(s.x - 0.4, s.y + 5, 0.8, 4);
+    } else if (s.kind === 'heavy') {                   // 주황 해머: 굵은 관통 어뢰
+      ctx.fillStyle = 'rgba(255,138,61,.3)';
+      ctx.beginPath(); ctx.arc(s.x, s.y + 4, 4.2, 0, TAU); ctx.fill();
+      ctx.fillStyle = rapid ? '#fff1a8' : '#ffb27a';
+      ctx.beginPath(); ctx.roundRect(s.x - 2.2, s.y - 6, 4.4, 12, 2.2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(s.x - 0.6, s.y - 5, 1.2, 8);
     } else if (s.kind === 'spread') {                  // 확산: 가는 방향으로 기운 주황 탄
       ctx.save();
       ctx.translate(s.x, s.y);
@@ -701,12 +768,21 @@ function drawShots(ctx, game) {
 function drawBombs(ctx, game) {
   if (game.bombs <= 0) return;
   const gx = 96, gy = H - 9;
-  shadowText(ctx, t('hud.ult'), gx + 28, gy - 8, 8, '#9ff');
+  shadowText(ctx, t(`hud.ult.${game.special}`), gx + 28, gy - 8, 8, '#9ff');
   for (let i = 0; i < game.bombs; i++) {
     ctx.fillStyle = COLOR.tide;
     ctx.beginPath(); ctx.arc(gx + 4 + i * 10, gy, 3.6, 0, TAU); ctx.fill();
     ctx.strokeStyle = '#9fd8ff'; ctx.lineWidth = 1; ctx.stroke();
   }
+}
+
+/** 콤보: 점수 아래에 연속 격추 수와 배율, 이어 갈 수 있는 남은 시간 막대 */
+function drawCombo(ctx, game) {
+  const hot = game.comboMult > 1;
+  text(ctx, `${t('hud.combo')} ${game.combo}`, 8, 36, 9, hot ? '#ffd23f' : COLOR.text);
+  if (hot) text(ctx, `x${game.comboMult}`, 8, 47, 9, '#ff9f3f');
+  ctx.fillStyle = hot ? '#ffd23f' : '#9fd8ff';
+  ctx.fillRect(8, hot ? 50 : 39, 40 * game.comboT / COMBO_TICKS, 2);
 }
 
 function drawHud(ctx, game) {
@@ -716,7 +792,9 @@ function drawHud(ctx, game) {
   text(ctx, String(game.hiScore), W / 2, 24, 10, COLOR.text, 'center');
   if (game.boss && game.boss.state !== 'dead') drawBossBar(ctx, game.boss);
   if (game.phase === 'over') return;
-  for (let i = 0; i < Math.min(game.lives - 1, 5); i++) drawSub(ctx, 14 + i * 16, H - 10, COLOR.sub, COLOR.subDark, 0);
+  if (game.combo >= 2 && !game.bonus) drawCombo(ctx, game);
+  const [body, dark] = shipColors(game.player.ship);
+  for (let i = 0; i < Math.min(game.lives - 1, 5); i++) drawSub(ctx, 14 + i * 16, H - 10, body, dark, 0);
   text(ctx, game.stage === FINAL_STAGE ? t('hud.last') : t('hud.stage', { n: game.stage }), W - 8, H - 6, 9, game.stage === FINAL_STAGE ? '#ff5a5a' : COLOR.accent, 'right');
   if (!game.bonus) drawBombs(ctx, game);
   drawWeapon(ctx, game.player, game.frame);
@@ -742,7 +820,7 @@ function drawBuffs(ctx, player) {
 
 /** 새 무기를 쓰는 동안: 이름과 남은 시간 막대 (끝나 가면 깜빡) */
 function drawWeapon(ctx, player, frame) {
-  if (player.weaponT <= 0 || player.weapon === 'torpedo') return;
+  if (player.weaponT <= 0 || player.weapon === player.base) return;
   if (player.weaponT < 180 && (frame >> 3) % 2) return;
   const c = ITEM_STYLE[player.weapon][0];
   text(ctx, t(`weapon.${player.weapon}`), 8, H - 28, 8, c);
@@ -786,8 +864,69 @@ function drawEnding(ctx, game) {
     shadowText(ctx, t('ending.bonus', { n: game.ending?.bonus ?? 0 }), cx, 196, 10, '#9ff');
   }
   ctx.globalAlpha = 1;
-  drawSub(ctx, cx, 224 + Math.sin(T * 0.05) * 3, COLOR.sub, COLOR.subDark, T);
+  drawSub(ctx, cx, 224 + Math.sin(T * 0.05) * 3, ...shipColors(game.ship), T);
   if (T >= ENDING_SKIP && (game.frame >> 5) % 2 === 0) shadowText(ctx, tt('ending.continue'), cx, 254, 8, COLOR.text);
+}
+
+/** 결과 화면의 기체 고르기 줄: ◀ 이름 ▶ (누르는 범위는 shipArrowAt). 점은 몇 번째 기체인지 알려 준다 */
+function drawShipPicker(ctx, game, y) {
+  const cx = W / 2, id = game.ship, [body] = shipColors(id);
+  ctx.globalAlpha = (game.frame >> 4) % 2 ? 1 : 0.6;
+  shadowText(ctx, '◀', cx - ARROW_DX, y, 12, COLOR.accent);
+  shadowText(ctx, '▶', cx + ARROW_DX, y, 12, COLOR.accent);
+  ctx.globalAlpha = 1;
+  shadowText(ctx, t(`ship.${id}`), cx, y, 9, body);
+  SHIP_ORDER.forEach((s, i) => {
+    ctx.fillStyle = s === id ? body : 'rgba(255,255,255,.3)';
+    ctx.beginPath(); ctx.arc(cx + (i - 1) * 8, y + 7, 1.8, 0, TAU); ctx.fill();
+  });
+}
+
+/** 기체 고르기 화면: 카드 셋을 나란히. 고른 카드는 테두리가 빛나고 위아래로 흔들린다 */
+function drawSelect(ctx, game) {
+  const cx = W / 2;
+  ctx.fillStyle = 'rgba(2,16,30,.72)';
+  ctx.fillRect(0, 0, W, H);
+  shadowText(ctx, t('select.title'), cx, 32, 14, COLOR.accent);
+  SHIP_ORDER.forEach((id, i) => {
+    const x = CARD.x0 + i * (CARD.w + CARD.gap), mid = x + CARD.w / 2, on = id === game.ship;
+    const [body, dark] = shipColors(id), def = SHIPS[id];
+    ctx.save();
+    if (!on) ctx.globalAlpha = 0.6;
+    ctx.fillStyle = on ? 'rgba(14,90,130,.8)' : 'rgba(6,40,66,.75)';
+    ctx.beginPath(); ctx.roundRect(x, CARD.y, CARD.w, CARD.h, 5); ctx.fill();
+    ctx.strokeStyle = on ? body : 'rgba(159,216,255,.35)';
+    ctx.lineWidth = on ? 2 : 1;
+    ctx.stroke();
+    shadowText(ctx, t(`ship.${id}`), mid, CARD.y + 16, 9, body);
+    ctx.save();
+    ctx.translate(mid, CARD.y + 42 + (on ? Math.sin(game.frame * 0.08) * 2 : 0));
+    ctx.scale(2.2, 2.2);
+    drawSub(ctx, 0, 0, body, dark, game.frame);
+    ctx.restore();
+    const left = x + 6, right = x + CARD.w - 6, row = (k) => CARD.y + 72 + k;
+    shadowText(ctx, t('select.atk'), left, row(0), 7, '#9fd8ff', 'left');
+    shadowText(ctx, t(`ship.${id}.atk`), mid, row(11), 8, COLOR.text);
+    shadowText(ctx, t('select.speed'), left, row(28), 7, '#9fd8ff', 'left');
+    const pips = 1 + (def.speed > 1.5) + (def.speed > 1.9);                       // 속도를 칸 1~3개로
+    for (let k = 0; k < 3; k++) { ctx.fillStyle = k < pips ? body : 'rgba(255,255,255,.2)'; ctx.fillRect(right - 22 + k * 8, row(28) - 6, 6, 6); }
+    shadowText(ctx, t('select.bombs'), left, row(42), 7, '#9fd8ff', 'left');
+    for (let k = 0; k < def.bombs; k++) {                                          // 시작 폭탄 수만큼 방울
+      ctx.fillStyle = COLOR.tide;
+      ctx.beginPath(); ctx.arc(right - 3 - (def.bombs - 1 - k) * 8, row(42) - 3, 2.8, 0, TAU); ctx.fill();
+    }
+    shadowText(ctx, t('select.special'), left, row(62), 7, '#9fd8ff', 'left');
+    shadowText(ctx, t(`ship.${id}.sp`), mid, row(74), 8, '#9ff');
+    shadowText(ctx, t(`ship.${id}.sp.1`), mid, row(86), 7, COLOR.text);
+    shadowText(ctx, t(`ship.${id}.sp.2`), mid, row(96), 7, COLOR.text);
+    ctx.restore();
+  });
+  if (touchUI) {                                                                     // 터치: 카드를 눌러 고르고 출발 버튼
+    ctx.fillStyle = '#0891b2';
+    ctx.beginPath(); ctx.roundRect(cx - 42, SELECT_GO_Y, 84, 26, 6); ctx.fill();
+    shadowText(ctx, t('select.go'), cx, SELECT_GO_Y + 18, 12, COLOR.text);
+    shadowText(ctx, t('select.hint.touch'), cx, 280, 7, '#9fd8ff');
+  } else if ((game.frame >> 5) % 2 === 0) shadowText(ctx, t('select.hint'), cx, 256, 9, COLOR.text);
 }
 
 function drawOverlay(ctx, game) {
@@ -798,7 +937,8 @@ function drawOverlay(ctx, game) {
     ctx.fillRect(0, 0, W, H);
     shadowText(ctx, t('title'), cx, 80, 22, COLOR.accent);
     shadowText(ctx, t('title.sub'), cx, 102, 8, COLOR.text);
-    ctx.save(); ctx.translate(cx, 138); ctx.scale(2.2, 2.2); drawSub(ctx, 0, Math.sin(game.frame * 0.05) * 2, COLOR.sub, COLOR.subDark, game.frame); ctx.restore();
+    const [body, dark] = shipColors(game.ship);
+    ctx.save(); ctx.translate(cx, 138); ctx.scale(2.2, 2.2); drawSub(ctx, 0, Math.sin(game.frame * 0.05) * 2, body, dark, game.frame); ctx.restore();
     if (game.hiScore > 0) shadowText(ctx, t('title.best', { n: game.hiScore }), cx, 198, 8, '#9fd8ff');
     if ((game.frame >> 5) % 2 === 0) shadowText(ctx, tt('title.start'), cx, 212, 10, COLOR.text);
     if (touchUI) shadowText(ctx, t('title.touch'), cx, 245, 8, '#9fd8ff');
@@ -807,6 +947,8 @@ function drawOverlay(ctx, game) {
       shadowText(ctx, t('title.touch'), cx, 252, 8, '#9fd8ff');
     }
     shadowText(ctx, t('hint.captive'), cx, 268, 7, COLOR.accent);
+  } else if (phase === 'select') {
+    drawSelect(ctx, game);
   } else if (phase === 'ready') {
     if (game.boss) {
       if ((game.frame >> 3) % 2 === 0) shadowText(ctx, t('msg.warning'), cx, 128, 18, '#ff5a5a');
@@ -842,6 +984,7 @@ function drawOverlay(ctx, game) {
     }
     drawRecords(ctx, game, 156);
     if (!game.naming) {                       // 이름을 쓰는 동안에는 아래쪽을 입력 칸이 쓴다
+      drawShipPicker(ctx, game, PICK_Y.over);
       if (game.timer >= OVER_LOCK && (game.frame >> 5) % 2 === 0) shadowText(ctx, tt('msg.over.again'), cx, 252, 9, COLOR.text);
     }
   } else if (phase === 'ending') {
@@ -868,16 +1011,24 @@ export function draw(ctx, game) {
   const visible = game.enemies.filter((e) => e.state !== 'wait' && e.state !== 'gone');
   for (const e of visible) if (e.beamLen > 0) drawBeam(ctx, e, frame);
   for (const e of visible) drawEnemy(ctx, e, frame);
-  if (game.boss && game.boss.state !== 'dead' && phase !== 'title') drawBoss(ctx, game.boss, frame);
-  if (phase !== 'title') {
+  if (game.boss && game.boss.state !== 'dead' && phase !== 'title' && phase !== 'select') drawBoss(ctx, game.boss, frame);
+  if (phase !== 'title' && phase !== 'select') {
     for (const it of game.items) drawItem(ctx, it, frame);
     if (game.boss && game.boss.kind === 'angler') drawDarkness(ctx, game);
     if (phase !== 'dying' && phase !== 'captured' && phase !== 'over' && phase !== 'ending') drawPlayer(ctx, game);
     if (game.capture) drawSpunSub(ctx, game.capture, COLOR.captive, COLOR.captiveDark, frame);
-    if (game.rescue) drawSpunSub(ctx, game.rescue, COLOR.sub, COLOR.subDark, frame);
+    if (game.rescue) drawSpunSub(ctx, game.rescue, ...shipColors(game.player.ship), frame);
     drawShots(ctx, game);
-    if (game.wave) drawWave(ctx, game.wave, frame);
+    if (game.wave) {
+      if (game.wave.kind === 'storm') drawStorm(ctx, game.wave);
+      else if (game.wave.kind === 'carpet') drawCarpet(ctx, game.wave);
+      else drawWave(ctx, game.wave, frame);
+    }
     for (const f of game.fx) drawFx(ctx, f);
+    if (game.flashT > 0) {                                                           // 필살기를 쓴 순간의 번쩍임
+      ctx.fillStyle = `rgba(255,255,255,${0.55 * game.flashT / game.flashMax})`;
+      ctx.fillRect(-12, -12, W + 24, H + 24);
+    }
     for (const p of game.popups) {
       ctx.globalAlpha = Math.min(1, p.timer / 20);
       shadowText(ctx, p.key ? t(p.key) : p.text, p.x, p.y - (60 - p.timer) * 0.2, 8, COLOR.text);

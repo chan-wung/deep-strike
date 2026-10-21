@@ -8,9 +8,15 @@
 export const WEAPONS = ['spread', 'laser', 'homing', 'blast', 'sonic'];
 export const WEAPON_TICKS = 900;
 
-/** 무기 모양: shots 는 한 기체가 한 번에 쏘는 발 수, angles 는 위쪽(-π/2) 기준 벌어짐 */
+/**
+ * 무기 모양: shots 는 한 기체가 한 번에 쏘는 발 수, angles 는 위쪽(-π/2) 기준 벌어짐.
+ * plain 은 곧장 위로 가는 기본 공격(기체마다 다르다): offsets 는 나란히 나가는 줄의 좌우 간격, k 는 어뢰 속도에 곱하는 배율,
+ * maxHit 는 관통 어뢰가 꿰뚫을 수 있는 적의 수
+ */
 export const WEAPON_DEF = {
-  torpedo: { shots: 1, angles: [0], speed: 4.5, cooldown: 7 },
+  torpedo: { shots: 1, angles: [0], speed: 4.5, cooldown: 7, plain: true },
+  needle: { shots: 2, angles: [0], speed: 3.8, cooldown: 6, plain: true, kind: 'needle', offsets: [-3, 3], k: 0.85 },
+  heavy: { shots: 1, angles: [0], speed: 4.2, cooldown: 12, plain: true, kind: 'heavy', pierce: true, maxHit: 2, w: 2.6 },
   spread: { shots: 3, angles: [-0.26, 0, 0.26], speed: 4.2, cooldown: 8 },
   laser: { shots: 1, angles: [0], speed: 8, cooldown: 9, pierce: true },
   homing: { shots: 1, angles: [0], speed: 3.4, cooldown: 9, homing: true },

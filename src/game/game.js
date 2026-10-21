@@ -6,6 +6,8 @@ import { createBoss } from './bosses.js';
 import { Player, PLAYER_Y, TWIN_GAP, RAPID_TICKS, UPGRADE_MAX } from './player.js';
 import { buildStage, isBonus, isBoss, bonusKind, pickBonusPlan, BONUS_FISH, BONUS_TARGETS, BONUS_WHALE_HP, BONUS_PEARLS } from './stage.js';
 import { WEAPONS, UPGRADES, WEAPON_DEF, pickItem, pickWeapon } from './weapons.js';
+import { SHIPS, SHIP_ORDER, DEFAULT_SHIP, isShip } from './ships.js';
+import { SPECIALS } from './specials.js';
 import { addRecord, cleanName, qualifies } from '../app/records.js';
 
 export const TICRATE = 60;
@@ -31,16 +33,17 @@ const CLEAR_BONUS_PER_LIFE = 10000;
 /** 엔딩이 나온 뒤 이만큼 지나야 키로 넘길 수 있다 */
 export const ENDING_SKIP = 2 * TICRATE;
 const BOSS_SCORE = 5000;
-/** 필살기(해일): 게이지가 가득 차면 쓴다. 바닥에서 위로 쓸어 올라가며 탄을 지우고 적에게 피해를 준다 */
-export const START_BOMBS = 3;
+/** 콤보: 이 시간(1.5초) 안에 또 잡으면 이어지고, COMBO_STEP 마리마다 배율이 0.5 씩 올라 COMBO_MAX 배까지 */
+export const COMBO_TICKS = 90;
+const COMBO_STEP = 10;
+const COMBO_MAX = 3;
+/** 필살기: 폭탄을 하나 써서 기체의 필살기(specials.js)를 일으킨다. 시작 폭탄 수는 기체마다 다르다 (노랑 3 · 다트 2 · 해머 4) */
+export const START_BOMBS = SHIPS[DEFAULT_SHIP].bombs;
 export const MAX_BOMBS = 6;
-const WAVE_SPEED = 6;
-const WAVE_DAMAGE = 1;
-const WAVE_BOSS_DAMAGE = 10;
-/** 해일 기둥의 반폭: 쓴 순간 잠수함 위치를 중심으로 이만큼 좌우만 훑는다 (전체 폭 약 70px) */
-export const WAVE_HALF_W = 35;
 const MAX_BULLETS_BOSS = 48;
 const MAX_MINIONS = 6;
+/** 기체 고르기 화면이 나온 뒤 이만큼 지나야 키로 출발한다 (타이틀을 넘긴 입력이 그대로 출발이 되지 않게) */
+export const SELECT_LOCK = 15;
 /** 게임 오버 결과 화면이 나온 뒤 이만큼 지나야 키로 다시 시작한다 (연타하다 결과를 못 보는 일을 막는다) */
 export const OVER_LOCK = TICRATE;
 /** 잠수함을 잃고 곧바로 되살아난 뒤 맞지 않는 시간 (3초, 깜빡인다) */
@@ -76,7 +79,7 @@ const nearestMates = (e, pool, kind, n) => pool
 
 /**
  * 게임 규칙 전체. 화면·키보드를 모르므로 node 에서 그대로 테스트할 수 있다.
- * phase: title → ready → play → (dying | captured → ready | over) / (clear | bonusResult → ready)
+ * phase: title → select → ready → play → (dying | captured → ready | over) / (clear | bonusResult → ready)
  *        마지막 보스(FINAL_STAGE)를 쓰러뜨리면 clear → ending → over
  * lives 는 지금 타는 잠수함까지 센 숫자다 (화면에는 lives - 1 개를 예비로 보여 준다)
  * 점수판은 하나다 (records). over 에서 점수판에 오를 점수면 naming 이 켜져 이름을 받는다
@@ -85,6 +88,7 @@ export class Game {
   /** bonusPlan: 보너스 스테이지 계획을 고정한다 (테스트용). 없으면 판마다 난수로 뽑는다 */
   constructor({ rng = Math.random, bonusPlan = null } = {}) {
     this.rng = rng;
+    this.ship = DEFAULT_SHIP;      // 타이틀·결과 화면에서 고른 기체. 새 게임이 시작될 때 적용된다
     this.fixedPlan = bonusPlan;
     this.player = new Player();
     this.formation = new Formation();
@@ -97,6 +101,7 @@ export class Game {
     this.rank = null;
     this.events = [];           // 효과음용 이벤트 이름. main 이 매 프레임 비운다
     this.shakeT = 0; this.shakeMax = 1; this.shakeMag = 0;
+    this.flashT = 0; this.flashMax = 1;
     this.newGame();
     this.phase = 'title';
   }
@@ -111,6 +116,8 @@ export class Game {
   syncHi() { this.hiScore = this.records[0]?.score || 0; }
 
   emit(name) { if (this.events.length < 64) this.events.push(name); }
+  /** 화면 번쩍임: t 틱 동안 하얗게 덮였다가 사라진다 (필살기) */
+  flash(t) { this.flashT = this.flashMax = t; }
   /** 화면 흔들림: mag 픽셀로 t 틱 동안 점점 잦아든다 */
   shake(mag, t) { this.shakeMag = mag; this.shakeT = this.shakeMax = t; }
 
@@ -120,7 +127,10 @@ export class Game {
     this.lives = LIVES;
     this.stage = 1;
     this.extraAt = FIRST_EXTRA;
-    this.bombs = START_BOMBS;
+    this.player.setShip(this.ship);
+    this.bombs = this.startBombs;
+    this.combo = 0;
+    this.comboT = 0;
     this.bonusPlan = this.fixedPlan ?? pickBonusPlan(this.rng);   // 이번 판의 보너스 스테이지 { 스테이지: 패턴 }
     this.stats = { shots: 0, hits: 0, bosses: 0 };
     this.lastRecord = null;     // 게임 오버·엔딩 때 한 번 만들어지는 기록 (이름을 받아 submitName 으로 점수판에 넣는다)
@@ -140,6 +150,9 @@ export class Game {
     this.wave = null;
     this.items = [];
     this.shakeT = 0;
+    this.flashT = 0;
+    this.combo = 0;
+    this.comboT = 0;
     if (this.boss) this.emit('warning');
     this.bonus = isBonus(this.stage, this.bonusPlan);
     this.pearlsLeft = this.bonusKind === 'pearl' ? BONUS_PEARLS : 0;       // 아직 흘려보내지 않은 진주
@@ -159,23 +172,55 @@ export class Game {
     this.timer = 2 * TICRATE;
   }
 
-  /** title / over 에서 키를 누르면 새 게임. 엔딩에서는 결과 화면으로. 이름을 쓰는 중에는 아무 일도 없다 */
+  /**
+   * title 에서 키를 누르면 기체 고르기(select) 화면으로, select 에서는 고른 기체로 새 게임, over 에서는 바로 새 게임.
+   * 엔딩에서는 결과 화면으로. 이름을 쓰는 중에는 아무 일도 없다
+   */
   start() {
     if (this.naming) return;
     if (this.phase === 'ending') { if (this.timer >= ENDING_SKIP) this.enterResults(); return; }
     if (this.phase === 'over' && this.timer < OVER_LOCK) return;
-    if (this.idle) this.newGame();
+    if (this.phase === 'title') { this.phase = 'select'; this.timer = 0; this.emit('select'); return; }
+    if (this.phase === 'select' && this.timer < SELECT_LOCK) return;     // 타이틀을 넘긴 그 입력이 곧바로 출발로 이어지지 않게
+    if (this.idle || this.phase === 'select') this.newGame();
   }
 
   setMove(dir) { this.player.setMove(dir); }
   setFire(on) { this.player.setFire(on); }
   moveTo(x) { this.player.moveTo(x); }
 
-  /** 일시정지는 타이틀·게임 오버 화면에서는 의미가 없다 */
-  get canPause() { return !this.idle && this.phase !== 'ending'; }
+  /** 일시정지는 타이틀·기체 고르기·게임 오버 화면에서는 의미가 없다 */
+  get canPause() { return !this.idle && this.phase !== 'select' && this.phase !== 'ending'; }
   pause() { if (this.canPause) this.paused = true; }
   resume() { this.paused = false; }
   togglePause() { if (this.paused) this.resume(); else this.pause(); }
+
+  /** 이 기체의 필살기 이름 (wave · storm · carpet) */
+  get special() { return SHIPS[this.ship].special; }
+  /** 이 기체가 처음(새 게임·잠수함을 잃은 뒤)에 갖는 폭탄 수 */
+  get startBombs() { return SHIPS[this.ship].bombs; }
+
+  /** 기체를 고를 수 있는 때: 기체 고르기 화면, 그리고 게임 오버 결과 화면(이름을 쓰는 중은 제외) */
+  get canPick() { return this.phase === 'select' || (this.phase === 'over' && !this.naming); }
+
+  /** 기체를 한 칸 넘긴다 (dir: 1 다음 · -1 이전) */
+  selectShip(dir) {
+    if (!this.canPick) return false;
+    const n = SHIP_ORDER.length;
+    return this.pickShip(SHIP_ORDER[(SHIP_ORDER.indexOf(this.ship) + dir + n) % n]);
+  }
+
+  /** 기체를 직접 고른다 (카드를 눌렀을 때). 고를 수 없거나 알 수 없는 이름이면 false */
+  pickShip(id) {
+    if (!this.canPick || !isShip(id)) return false;
+    if (id !== this.ship) { this.ship = id; this.emit('select'); }
+    return true;
+  }
+
+  /** 저장된 기체 이름으로 처음 상태를 맞춘다 (알 수 없는 이름은 무시) */
+  chooseShip(id) {
+    if (isShip(id)) this.ship = id;
+  }
 
   /** 지금 필살기를 쓸 수 있나 (폭탄이 있어야 하고, 보너스 스테이지에서는 못 쓴다) */
   get ultReady() { return this.phase === 'play' && !this.paused && !this.bonus && !this.wave && this.bombs > 0; }
@@ -183,17 +228,26 @@ export class Game {
   ult() {
     if (!this.ultReady) return false;
     this.bombs--;
-    const { player } = this;
-    this.wave = { x: player.x + (player.twin ? TWIN_GAP / 2 : 0), y: H + 10, hit: new Set(), boss: false };
-    this.emit('ult');
+    this.wave = SPECIALS[this.special].start(this);
+    this.emit({ wave: 'ult', storm: 'storm', carpet: 'carpet' }[this.special]);
     this.shake(2.5, 40);
+    this.flash(this.special === 'wave' ? 14 : 8);
     return true;
   }
 
   addBomb(n = 1) { this.bombs = Math.min(MAX_BOMBS, this.bombs + n); }
 
+  /** 지금 콤보 배율 (1 ~ COMBO_MAX) */
+  get comboMult() { return Math.min(COMBO_MAX, 1 + Math.floor(this.combo / COMBO_STEP) * 0.5); }
+
   get diveSpeed() { return Math.min(1.7 + 0.08 * (this.stage - 1), 2.8); }
   get late() { return this.stage >= LATE_FROM; }
+  /** 지금 틀어야 할 배경 음악 이름 (소리는 모르고 이름만 알려 준다). 타이틀·클리어·결과 화면은 조용하다 */
+  get music() {
+    if (this.phase === 'ending') return 'ending';
+    if (['title', 'select', 'over', 'clear', 'bonusResult'].includes(this.phase)) return null;
+    return this.boss ? 'boss' : this.bonus ? 'bonus' : 'stage';
+  }
   get maxDivers() { return Math.max(1, Math.min(2 + (this.stage >> 1), 6) + (this.late ? 1 : 0)); }
   get diveInterval() { return Math.max(40, 130 - 7 * (this.stage - 1)); }
   get maxBullets() { return 4 + Math.min(this.stage, 6); }
@@ -238,6 +292,7 @@ export class Game {
         break;
       case 'ending': this.timer++; break;
       case 'over': this.timer++; break;
+      case 'select': this.timer++; break;
       case 'bonusResult':
         this.coast();
         if (--this.timer <= 0) { this.stage++; this.startStage(); }
@@ -299,12 +354,14 @@ export class Game {
     }
     this.items = this.items.filter((it) => it.t < (it.life ?? ITEM_LIFE) && !it.taken);
     if (this.shakeT > 0) this.shakeT--;
+    if (this.flashT > 0) this.flashT--;
     this.enemies = this.enemies.filter((e) => e.state !== 'gone');
   }
 
   play() {
     const { player } = this;
     this.playTime++;
+    if (this.comboT > 0 && --this.comboT === 0) this.combo = 0;
     const fired = player.step(true, this.homingTargets());
     if (fired) { this.stats.shots += fired * WEAPON_DEF[player.weapon].shots; this.emit('shot'); }   // 확산탄은 알갱이 하나하나를 센다
     this.moveWorld();
@@ -408,26 +465,10 @@ export class Game {
     this.items = this.items.filter((it) => !it.taken);
   }
 
-  /** 필살기 해일이 한 틱 올라간다 */
+  /** 필살기(대해일·어뢰 폭풍·심해 폭격)가 한 틱 진행된다 */
   waveStep() {
     const w = this.wave;
-    if (!w) return;
-    w.y -= WAVE_SPEED;
-    this.player.invuln = Math.max(this.player.invuln, 2);        // 해일이 지나는 동안은 맞지 않는다
-    const inColumn = (x, pad = 0) => Math.abs(x - w.x) <= WAVE_HALF_W + pad;
-    this.bullets = this.bullets.filter((b) => b.y < w.y || !inColumn(b.x));   // 기둥 안에서 해일 아래에 잠긴 탄만 지워진다
-    for (const e of this.enemies) {
-      if (!e.hittable || w.hit.has(e.id) || e.y < w.y || !inColumn(e.x, 6)) continue;
-      w.hit.add(e.id);
-      e.hp -= WAVE_DAMAGE;
-      if (e.hp <= 0) this.kill(e, true); else this.boom(e.x, e.y);
-    }
-    const b = this.boss;
-    if (b && !w.boss && b.y + 24 >= w.y && inColumn(b.x, 30)) {
-      w.boss = true;
-      this.damageBoss(WAVE_BOSS_DAMAGE);
-    }
-    if (w.y < -20) this.wave = null;
+    if (w && SPECIALS[w.kind].step(this, w)) this.wave = null;
   }
 
   /** 크라켄이 n 만큼 맞는다. 쓰러지면 점수·게이지 보상, 풀어 놓은 해파리와 탄은 사라진다 */
@@ -550,6 +591,7 @@ export class Game {
       this.countHit(s);
       this.damageBoss(1);
     }
+    if (s.maxHit && s.hit.size >= s.maxHit) s.dead = true;      // 관통 어뢰는 정해진 수만큼 꿰뚫으면 사라진다
   }
 
   /** 폭발 어뢰가 터진다: 반경 안의 적(맞은 적 first 는 빼고)을 모두 맞히고, 보스는 직접 맞지 않았으면 한 번만 맞는다 */
@@ -592,6 +634,12 @@ export class Game {
       if (mates === 1) pts = 800; else if (mates >= 2) pts = 1600;
     }
     if (e.kind === 'fish') this.bonusKills++;
+    if (!this.bonus) {                                                                // 보너스 스테이지는 점수가 정해져 있어 콤보를 쓰지 않는다
+      this.combo++;
+      this.comboT = COMBO_TICKS;
+      if (this.combo % COMBO_STEP === 0) this.emit('combo');
+      pts = Math.round(pts * this.comboMult);
+    }
     this.addScore(pts);
     this.popup(e.x, e.y, String(pts));
     this.boom(e.x, e.y);
@@ -696,7 +744,9 @@ export class Game {
   /** 잠수함 하나를 잃었다: 남아 있으면 다시 준비, 아니면 끝 */
   loseShip() {
     this.lives--;
-    this.bombs = START_BOMBS;                         // 잠수함을 잃으면 폭탄은 처음 개수로 돌아간다
+    this.combo = 0;
+    this.comboT = 0;
+    this.bombs = this.startBombs;                   // 잠수함을 잃으면 폭탄은 이 기체의 처음 개수로 돌아간다
     this.clearField();
     if (this.lives <= 0) { this.finish(); return; }
     this.player.reset(false);
@@ -708,7 +758,7 @@ export class Game {
   buildRecord(cleared) {
     this.lastRecord = {
       score: this.score, stage: this.stage, ratio: this.hitRatio,
-      bosses: this.stats.bosses, cleared,
+      bosses: this.stats.bosses, cleared, ship: this.ship,
     };
   }
 

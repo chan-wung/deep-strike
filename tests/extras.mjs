@@ -4,14 +4,14 @@ import { buildStage } from '../src/game/stage.js';
 import { Player, RAPID_TICKS } from '../src/game/player.js';
 import { PLAYER_Y } from '../src/game/player.js';
 import { H } from '../src/game/paths.js';
-import { check, done, seq } from './lib.mjs';
+import { begin, check, done, seq } from './lib.mjs';
 
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
 const formed = (kind = 'bee', row = 3, col = 4) => { const e = new Enemy({ kind, row, col }); e.state = 'formation'; return e; };
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 function playing(enemies, { rng = seq(0.5) } = {}) {
   const g = new Game({ bonusPlan: {}, rng });
-  g.start();
+  begin(g);
   g.enemies = [...enemies, anchor()];
   g.phase = 'play';
   g.playTime = 1000;
@@ -19,18 +19,18 @@ function playing(enemies, { rng = seq(0.5) } = {}) {
 }
 
 // 난이도는 하나: 잠수함 3대, 11 스테이지부터 조금 더 어렵다
-const gn = new Game({ bonusPlan: {} }); gn.start();
+const gn = new Game({ bonusPlan: {} }); begin(gn);
 check('잠수함 3대로 시작', gn.lives === LIVES && LIVES === 3);
-const lateAt = (stage) => { const q = new Game({ bonusPlan: {} }); q.start(); q.stage = stage; return q; };
+const lateAt = (stage) => { const q = new Game({ bonusPlan: {} }); begin(q); q.stage = stage; return q; };
 check(`${LATE_FROM} 스테이지부터 동시 급강하가 하나 는다`, LATE_FROM === 11 && lateAt(11).maxDivers === Math.min(2 + (11 >> 1), 6) + 1 && lateAt(10).maxDivers === Math.min(2 + (10 >> 1), 6));
 const bulletSpeed = (stage) => { const q = lateAt(stage); q.makeEnv().shoot(10, 10, Math.PI / 2, 2); return q.bullets[0].vy; };
 check('적 탄은 11 스테이지부터 1.1배 빠르다', Math.abs(bulletSpeed(10) - 2) < 1e-9 && Math.abs(bulletSpeed(11) - 2.2) < 1e-9);
 check('크라켄 체력은 60 (난이도 배율 없음)', (() => { const q = lateAt(5); q.startStage(); return q.boss.maxHp === 60; })());
-check('기록에는 난이도가 없다', (() => { const q = new Game({ bonusPlan: {} }); q.start(); q.lives = 1; q.score = 10; q.bullets.push({ x: q.player.x, y: PLAYER_Y, vx: 0, vy: 0 }); q.phase = 'play'; q.enemies = [formed()]; run(q, 100); return q.lastRecord && q.lastRecord.diff === undefined; })());
+check('기록에는 난이도가 없다', (() => { const q = new Game({ bonusPlan: {} }); begin(q); q.lives = 1; q.score = 10; q.bullets.push({ x: q.player.x, y: PLAYER_Y, vx: 0, vy: 0 }); q.phase = 'play'; q.enemies = [formed()]; run(q, 100); return q.lastRecord && q.lastRecord.diff === undefined; })());
 
 // 아이템: 품은 적이 미리 정해져 있고(반짝임), 잡으면 반드시 떨어뜨린다
 check('아이템은 세 종류', ITEM_TYPES.join() === 'rapid,shield,charge');
-const stageCarriers = (rngSeq, stage = 1, plan = {}) => { const g = new Game({ bonusPlan: plan }); g.start(); g.stage = stage; g.startStage(); g.rng = seq(...rngSeq); g.enemies = buildStage(stage, null, plan); g.assignItems(g.enemies); return g.enemies; };
+const stageCarriers = (rngSeq, stage = 1, plan = {}) => { const g = new Game({ bonusPlan: plan }); begin(g); g.stage = stage; g.startStage(); g.rng = seq(...rngSeq); g.enemies = buildStage(stage, null, plan); g.assignItems(g.enemies); return g.enemies; };
 check('품을 확률이 안 되면 아무도 안 품는다', stageCarriers([0.5]).every((e) => e.carries === null));
 check('확률이 되면 두 번째 난수로 종류가 정해진다 (이 경우 모두 방어막)', stageCarriers([0.01, 0.4]).every((e) => e.carries === 'shield'));
 check('종류는 난수에 따라 rapid / shield / charge', (() => { const e = stageCarriers([0.01, 0.0])[0], f = stageCarriers([0.01, 0.7])[0]; return e.carries === 'rapid' && f.carries === 'charge'; })());
@@ -58,7 +58,7 @@ const dvv = formed('butterfly', 1, 3); dvv.carries = 'rapid'; dvv.state = 'dive'
 gdv.hitEnemy(dvv);
 check('급강하 중에 잡아도 떨어진다', gdv.items.length === 1 && gdv.items[0].type === 'rapid');
 const gmin = new Game({ bonusPlan: {}, rng: seq(0.01, 0.0, 0.5) });
-gmin.start(); gmin.stage = 5; gmin.startStage(); gmin.rng = seq(0.01, 0.0, 0.5);
+begin(gmin); gmin.stage = 5; gmin.startStage(); gmin.rng = seq(0.01, 0.0, 0.5);
 gmin.spawnMinion(100, 80);
 check('크라켄이 풀어 놓는 해파리도 아이템을 품을 수 있다', gmin.enemies.length === 1 && gmin.enemies[0].carries === 'rapid');
 const gr = playing([formed()]); gr.enemies[0].carries = 'rapid';
@@ -112,7 +112,7 @@ check('방어막이 있으면 쌍둥이도 지킨다', gt.player.twin && !gt.pla
 // 돌진
 const dashRun = (stage, r) => {
   const g = new Game({ bonusPlan: {} });
-  g.start(); g.stage = stage; g.startStage();
+  begin(g); g.stage = stage; g.startStage();
   g.rng = seq(...r);
   const e = formed('bee', 3, 4); e.x = 112; e.y = 90;
   g.enemies = [e, anchor()]; g.phase = 'play';
@@ -154,9 +154,9 @@ const eo = playing([formed()]); eo.lives = 1; eo.events.length = 0;
 eo.bullets.push({ x: eo.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(eo, 100);
 check('마지막 잠수함을 잃으면 gameover 이벤트', eo.events.includes('gameover'));
-const ew = new Game({ bonusPlan: {} }); ew.start(); ew.stage = 5; ew.events.length = 0; ew.startStage();
+const ew = new Game({ bonusPlan: {} }); begin(ew); ew.stage = 5; ew.events.length = 0; ew.startStage();
 check('보스 스테이지가 시작되면 warning 이벤트', ew.events.includes('warning'));
-const eb = new Game({ bonusPlan: {} }); eb.start(); eb.stage = 5; eb.startStage(); eb.phase = 'play'; eb.boss.y = 62; eb.boss.state = 'fight'; eb.boss.hp = 1; eb.events.length = 0;
+const eb = new Game({ bonusPlan: {} }); begin(eb); eb.stage = 5; eb.startStage(); eb.phase = 'play'; eb.boss.y = 62; eb.boss.state = 'fight'; eb.boss.hp = 1; eb.events.length = 0;
 eb.player.shots.push({ x: eb.boss.x, y: 80 }); run(eb, 1);
 check('크라켄을 쓰러뜨리면 bossdown 이벤트와 흔들림', eb.events.includes('bossdown') && eb.shakeMag === 6);
 check('TICRATE', TICRATE === 60);

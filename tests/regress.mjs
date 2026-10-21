@@ -1,6 +1,6 @@
 import { Game, OVER_LOCK } from '../src/game/game.js';
 import { Enemy } from '../src/game/enemy.js';
-import { check, done } from './lib.mjs';
+import { begin, check, done } from './lib.mjs';
 
 const tickUntil = (g, phase, limit = 5000) => { for (let i = 0; i < limit && g.phase !== phase; i++) g.tick(); };
 const bossGame = (stage, rng) => {
@@ -27,13 +27,13 @@ const lcg = (seed) => { let s = seed; return () => (s = s * 16807 % 2147483647) 
   const g = bossGame(5, lcg(1));
   g.hitPlayer(); tickUntil(g, 'play');
   check('되살아나면 잠시 무적이다', g.player.invuln > 0);
-  const s = new Game({ bonusPlan: {}, rng: lcg(2) }); s.start(); tickUntil(s, 'play');
+  const s = new Game({ bonusPlan: {}, rng: lcg(2) }); begin(s); tickUntil(s, 'play');
   check('스테이지 시작에는 무적을 주지 않는다', s.player.invuln === 0);
 }
 
 // 2. 클리어·사망 연출 중에도 내 어뢰는 계속 날아간다
 {
-  const g = new Game({ bonusPlan: {}, rng: lcg(3) }); g.start();
+  const g = new Game({ bonusPlan: {}, rng: lcg(3) }); begin(g);
   tickUntil(g, 'play');
   g.setFire(true);
   for (let i = 0; i < 20; i++) g.tick();
@@ -46,7 +46,7 @@ const lcg = (seed) => { let s = seed; return () => (s = s * 16807 % 2147483647) 
   for (let i = 0; i < 60; i++) g.tick();
   check('클리어 중 어뢰가 화면 밖으로 날아가 사라진다', g.phase === 'clear' && g.player.shots.length === 0);
 
-  const d = new Game({ bonusPlan: {}, rng: lcg(4) }); d.start();
+  const d = new Game({ bonusPlan: {}, rng: lcg(4) }); begin(d);
   tickUntil(d, 'play');
   d.setFire(true);
   for (let i = 0; i < 20; i++) d.tick();
@@ -72,19 +72,19 @@ const lcg = (seed) => { let s = seed; return () => (s = s * 16807 % 2147483647) 
 
 // 5. 게임 오버 직후 연타로 결과 화면을 건너뛰지 않는다
 {
-  const g = new Game({ bonusPlan: {}, rng: lcg(6) }); g.start();
+  const g = new Game({ bonusPlan: {}, rng: lcg(6) }); begin(g);
   g.score = 100; g.finish();
   g.naming = false;
-  g.start();
+  begin(g);
   check('게임 오버 직후에는 키를 눌러도 다시 시작하지 않는다', g.phase === 'over');
   for (let i = 0; i < OVER_LOCK; i++) g.tick();
-  g.start();
+  begin(g);
   check('잠깐 지나면 다시 시작한다', g.phase === 'ready' && g.score === 0);
 }
 
 // 6. 명중률: 한 발은 몇 명을 맞혀도 한 번, 확산탄은 알갱이마다 쏜 수로 센다
 {
-  const mk = () => { const g = new Game({ bonusPlan: {}, rng: lcg(7) }); g.start(); tickUntil(g, 'play'); g.enemies = []; g.boss = null; g.bonus = true; return g; };
+  const mk = () => { const g = new Game({ bonusPlan: {}, rng: lcg(7) }); begin(g); tickUntil(g, 'play'); g.enemies = []; g.boss = null; g.bonus = true; return g; };
   const g = mk();
   g.player.setWeapon('spread'); g.player.setFire(true); g.tick();
   check('확산탄 한 번에 세 발을 쏜 것으로 센다', g.stats.shots === 3, `shots=${g.stats.shots}`);

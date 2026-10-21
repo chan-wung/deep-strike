@@ -11,7 +11,7 @@ import { BOSS_HOME_Y } from '../src/game/boss.js';
 import { PLAYER_Y } from '../src/game/player.js';
 import { H, W } from '../src/game/paths.js';
 import { setLang, t } from '../src/app/i18n.js';
-import { check, done, seq } from './lib.mjs';
+import { begin, check, done, seq } from './lib.mjs';
 
 const OLD = { 3: 'school', 7: 'school', 11: 'school' };      // 예전 고정 보너스 자리
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
@@ -20,7 +20,7 @@ const formed = (kind = 'bee', row = 3, col = 4) => { const e = new Enemy({ kind,
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 function playing(enemies, { stage = 1, rng = seq(0.5) } = {}) {
   const g = new Game({ bonusPlan: {} });                // 난수열은 만든 뒤에 심는다 (생성·시작이 난수를 쓰기 때문)
-  g.start(); g.stage = stage; g.startStage();
+  begin(g); g.stage = stage; g.startStage();
   g.rng = rng;
   g.enemies = [...enemies, anchor()];
   g.phase = 'play'; g.playTime = 1000;
@@ -250,7 +250,7 @@ for (const [s, kind] of cases) {
   if (crashed) break;
   try {
     const g = new Game({ bonusPlan: {}, rng: seq(0.2, 0.7, 0.4, 0.9, 0.1) });
-    g.start(); g.stage = s; if (kind) g.bonusPlan = { [s]: kind }; g.startStage();
+    begin(g); g.stage = s; if (kind) g.bonusPlan = { [s]: kind }; g.startStage();
     g.player.invuln = 1e9;
     g.setFire(true);
     for (let i = 0; i < 3000; i++) { g.moveTo(40 + (i % 140)); g.tick(); if (g.phase === 'over') break; }

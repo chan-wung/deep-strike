@@ -1,0 +1,17 @@
+{
+  "name": "Deep Strike (딥 스트라이크)",
+  "short_name": "Deep Strike",
+  "description": "노란 잠수함으로 바다 생물을 물리치는 갤러그형 슈팅 게임",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#02101e",
+  "theme_color": "#02101e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

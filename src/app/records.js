@@ -1,4 +1,5 @@
 import { t } from './i18n.js';
+import { DEFAULT_SHIP, isShip } from '../game/ships.js';
 
 /** 내 기록: 점수 높은 순으로 상위 10개만 남긴다 */
 export const MAX_RECORDS = 10;
@@ -21,6 +22,7 @@ const clean = (r) => ({
   ratio: Number.isFinite(r.ratio) ? r.ratio : 0,
   bosses: Number.isFinite(r.bosses) ? r.bosses : 0,
   cleared: r.cleared === true,
+  ship: isShip(r.ship) ? r.ship : DEFAULT_SHIP,     // 기체가 없던 옛 기록은 노랑 잠수함
   date: typeof r.date === 'string' ? r.date : '',
 });
 

@@ -1,6 +1,6 @@
 import { t } from '../app/i18n.js';
 import { NO_NAME } from '../app/records.js';
-import { drawSub, FONT } from './render.js';
+import { drawSub, FONT, SHIP_COLOR } from './render.js';
 
 const CW = 600, CH = 315;
 
@@ -45,11 +45,14 @@ export function makeCard(rec) {
   else if (rec.bosses > 0) label(t('card.bosses', { n: rec.bosses }), 36, 258, 18, '#ff9fb0');
   if (rec.date) label(rec.date, 36, 292, 14, '#9fd8ff');
 
+  const ship = SHIP_COLOR[rec.ship] ? rec.ship : 'yellow';
+  const [body, dark] = SHIP_COLOR[ship];
   ctx.save();
   ctx.translate(478, 168);
   ctx.scale(8, 8);
-  drawSub(ctx, 0, 0);
+  drawSub(ctx, 0, 0, body, dark);
   ctx.restore();
+  label(t(`ship.${ship}`), 478, 232, 16, body, 'center');
   return c;
 }
 

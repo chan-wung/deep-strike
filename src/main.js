@@ -3,7 +3,7 @@ import { draw, canvasSize, setTouchUI } from './render/render.js';
 import { cardBlob } from './render/card.js';
 import { setLang, getLang, t } from './app/i18n.js';
 import { parseBoards, shareText } from './app/records.js';
-import { Sfx } from './app/sound.js';
+import { Sfx, Music } from './app/sound.js';
 import { isTouchDevice, setupTouch } from './ui/touch.js';
 
 const MOVE_KEYS = { ArrowLeft: -1, KeyA: -1, ArrowRight: 1, KeyD: 1 };
@@ -14,6 +14,9 @@ const LANG_KEY = 'deepstrike.lang';
 const REC_KEY = 'deepstrike.records';       // 점수판 (난이도별로 나뉘어 있던 예전 형식도 읽어 합친다)
 const NAME_KEY = 'deepstrike.name';         // 마지막에 쓴 이름
 const MUTE_KEY = 'deepstrike.mute';
+const MUSIC_KEY = 'deepstrike.musicMute';   // 배경 음악만 따로 끄는 설정
+const SHIP_KEY = 'deepstrike.ship';         // 마지막에 고른 잠수함 기체
+const ULT_ICON = { wave: '🌊', storm: '🎯', carpet: '💣' };   // 기체별 필살기 버튼 그림
 
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -23,10 +26,13 @@ const store = {
 const game = new Game();
 game.records = parseBoards(store.get(REC_KEY));
 game.syncHi();
+game.chooseShip(store.get(SHIP_KEY));
 setLang(store.get(LANG_KEY) || (navigator.language?.startsWith('ko') ? 'ko' : 'en'));
 
 const sfx = new Sfx();
 sfx.muted = store.get(MUTE_KEY) === '1';
+const music = new Music(sfx);
+music.muted = store.get(MUSIC_KEY) === '1';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -35,7 +41,7 @@ canvas.width = size.width;
 canvas.height = size.height;
 
 const $ = (id) => document.getElementById(id);
-const langBtn = $('lang'), muteBtn = $('mute'), shareBtn = $('share'), saveBtn = $('save'), ultBtn = $('ult'), toastEl = $('toast');
+const langBtn = $('lang'), muteBtn = $('mute'), musicBtn = $('music'), shareBtn = $('share'), saveBtn = $('save'), ultBtn = $('ult'), toastEl = $('toast');
 const nameForm = $('name'), nameInput = $('nameInput'), nameOk = $('nameOk');
 
 /** 언어에 따라 바뀌는 버튼 글자 */
@@ -44,6 +50,8 @@ const showLabels = () => {
   shareBtn.textContent = t('btn.share');
   saveBtn.textContent = t('btn.save');
   muteBtn.textContent = sfx.muted ? '🔇' : '🔊';
+  musicBtn.textContent = '🎵';
+  musicBtn.style.opacity = music.muted ? '.45' : '1';
   document.documentElement.lang = getLang();
   nameOk.textContent = t('name.ok');
   nameInput.placeholder = t('name.default');
@@ -66,6 +74,13 @@ langBtn.addEventListener('click', () => {
   langBtn.blur();
 });
 muteBtn.addEventListener('click', () => { toggleMute(); muteBtn.blur(); });
+musicBtn.addEventListener('click', () => { toggleMusic(); musicBtn.blur(); });
+function toggleMusic() {
+  music.setMuted(!music.muted);
+  store.set(MUSIC_KEY, music.muted ? '1' : '0');
+  sfx.unlock();
+  showLabels();
+}
 function toggleMute() {
   sfx.setMuted(!sfx.muted);
   store.set(MUTE_KEY, sfx.muted ? '1' : '0');
@@ -96,11 +111,17 @@ addEventListener('keydown', (e) => {
   if (game.naming) return;                                   // 이름을 쓰는 중에는 입력창이 키를 받는다 (타이핑이 게임 키로 새지 않게)
   if (e.code === 'F5' || e.metaKey || e.ctrlKey || e.altKey) return;
   sfx.unlock();                                              // 브라우저 정책상 첫 입력 뒤에야 소리를 낼 수 있다
+  if (game.canPick && e.code in MOVE_KEYS) {                 // 기체 고르기·결과 화면에서 ← → 는 기체 고르기 (시작하지 않는다)
+    e.preventDefault();
+    if (!e.repeat) game.selectShip(MOVE_KEYS[e.code]);
+    return;
+  }
   if (e.code in MOVE_KEYS) { e.preventDefault(); moveHeld.add(e.code); syncKeys(); }
   if (FIRE_KEYS.has(e.code)) { e.preventDefault(); fireHeld.add(e.code); syncKeys(); }
   if (e.repeat) return;
   if (ULT_KEYS.has(e.code)) { e.preventDefault(); game.ult(); }
   if (e.code === 'KeyM') { toggleMute(); return; }
+  if (e.code === 'KeyN') { toggleMusic(); return; }
   if (PAUSE_KEYS.has(e.code)) { e.preventDefault(); game.togglePause(); }   // 타이틀·게임 오버에서는 아무 일 없이 start 로 넘어간다
   game.start();
 });
@@ -169,7 +190,7 @@ async function saveCard() {
 shareBtn.addEventListener('click', () => { shareRecord(); shareBtn.blur(); });
 saveBtn.addEventListener('click', () => { saveCard(); saveBtn.blur(); });
 
-let last = performance.now(), acc = 0;
+let last = performance.now(), acc = 0, savedShip = game.ship;
 function frame(now) {
   acc += Math.min(now - last, 250);       // 탭이 멈췄다 돌아와도 한꺼번에 몰아 돌리지 않게
   last = now;
@@ -178,14 +199,22 @@ function frame(now) {
 
   for (const name of game.events) sfx.play(name);
   game.events.length = 0;
+  music.update(game.music, game.stage, game.paused);
 
   syncNameForm();
 
   shareBtn.hidden = saveBtn.hidden = !(game.phase === 'over' && game.lastRecord && !game.naming);
   ultBtn.classList.toggle('ready', game.bombs > 0 && !game.bonus);
+  const icon = ULT_ICON[game.special];
+  if (ultBtn.textContent !== icon) ultBtn.textContent = icon;
+  if (savedShip !== game.ship) { savedShip = game.ship; store.set(SHIP_KEY, game.ship); }
 
   draw(ctx, game);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+// 오프라인·홈 화면 설치용 서비스 워커 (개발 서버에서는 캐시가 개발을 방해해서 빌드본에서만)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', () => navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {}));
+}
 window.__game = game;     // 개발 중 콘솔에서 상태 확인용

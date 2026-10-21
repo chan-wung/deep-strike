@@ -3,14 +3,14 @@ import { Kraken, KRAKEN_Y } from '../src/game/kraken.js';
 import { Enemy } from '../src/game/enemy.js';
 import { isBoss, isBonus, buildStage } from '../src/game/stage.js';
 import { PLAYER_Y } from '../src/game/player.js';
-import { check, done, seq } from './lib.mjs';
+import { begin, check, done, seq } from './lib.mjs';
 
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
 const formed = (kind = 'bee', row = 3, col = 4) => { const e = new Enemy({ kind, row, col }); e.state = 'formation'; return e; };
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 function playing(enemies, { rng = seq(0.5) } = {}) {
   const g = new Game({ bonusPlan: {}, rng });
-  g.start();
+  begin(g);
   g.enemies = [...enemies, anchor()];
   g.phase = 'play';
   g.playTime = 1000;
@@ -50,7 +50,7 @@ check('쓰러지는 연출이 끝나면 dead', kd.dead && kd.state === 'dead');
 
 // 게임 속 보스 스테이지
 const gb = new Game({ bonusPlan: {}, rng: seq(0.5) });
-gb.start(); gb.stage = 5; gb.startStage();
+begin(gb); gb.stage = 5; gb.startStage();
 check('5 스테이지: 크라켄, 적 목록은 비어 있다, 보너스 아님', gb.boss && gb.enemies.length === 0 && !gb.bonus);
 run(gb, 2 * TICRATE + 200);
 check('준비가 끝나면 크라켄이 자리를 잡고 탄을 쏜다', gb.phase === 'play' && gb.boss.state === 'fight' && gb.bullets.length > 0);
@@ -58,7 +58,7 @@ check('보스 스테이지에 빈 enemies 로 바로 클리어되지 않는다',
 check('보스 스테이지에서는 납치하지 않는다', !gb.canCapture());
 
 const gh = new Game({ bonusPlan: {}, rng: seq(0.5) });
-gh.start(); gh.stage = 5; gh.startStage(); gh.phase = 'play';
+begin(gh); gh.stage = 5; gh.startStage(); gh.phase = 'play';
 gh.boss.y = 62; gh.boss.state = 'fight';
 gh.player.shots.push({ x: gh.boss.x, y: gh.boss.y + 20 });
 gh.stats.shots = 1;
@@ -68,7 +68,7 @@ check('어뢰가 크라켄에 맞으면 체력 1 감소, 명중 기록', gh.boss
 
 // 보스 격파
 const gk = new Game({ bonusPlan: {}, rng: seq(0.5) });
-gk.start(); gk.stage = 5; gk.startStage(); gk.phase = 'play';
+begin(gk); gk.stage = 5; gk.startStage(); gk.phase = 'play';
 gk.boss.y = 62; gk.boss.state = 'fight'; gk.boss.hp = 1;
 gk.bullets.push({ x: 10, y: 10, vx: 0, vy: 0 });
 gk.enemies.push(formed('bee', 3, 3));
@@ -79,7 +79,7 @@ run(gk, 125);
 check('쓰러지는 연출 뒤 clear → 다음 스테이지', gk.phase === 'clear');
 run(gk, 2 * TICRATE + 1);
 check('6 스테이지는 보통 스테이지', gk.stage === 6 && !gk.boss && gk.enemies.length === 40 && gk.bombs === START_BOMBS + 1);
-const g10 = new Game({ bonusPlan: {} }); g10.start(); g10.stage = 10; g10.startStage(); g10.phase = 'play'; g10.boss.state = 'fight'; g10.boss.y = 62; g10.boss.hp = 1; g10.player.shots.push({ x: g10.boss.x, y: 80 });
+const g10 = new Game({ bonusPlan: {} }); begin(g10); g10.stage = 10; g10.startStage(); g10.phase = 'play'; g10.boss.state = 'fight'; g10.boss.y = 62; g10.boss.hp = 1; g10.player.shots.push({ x: g10.boss.x, y: 80 });
 run(g10, 1);
 check('10 스테이지 보스는 10000점', g10.score === 10000);
 
@@ -96,27 +96,25 @@ gu.enemies.push(butter, octo, far);
 check('ult(): 폭탄 하나 소모, 해일 시작, 쓴 자리의 x 를 기억', gu.ult() === true && gu.bombs === 1 && gu.wave && gu.wave.y > 288 - 1 && gu.wave.x === gu.player.x);
 check('쓰는 중에는 다시 못 쓴다', !gu.ultReady);
 run(gu, 25);
-check('해일은 기둥 안의 탄만 아래쪽부터 지운다 (앞면 y=148: 200 은 지워지고 100 은 남는다, 바깥 탄은 그대로)', !gu.bullets.some((b) => b.x === 100) && gu.bullets.some((b) => b.x === 110) && gu.bullets.some((b) => b.x === 30) && gu.bullets.some((b) => b.x === 200), `front=${gu.wave.y}`);
+check('해일은 화면 전체의 탄을 아래쪽부터 지운다 (앞면 y=148: 아래의 100·30 은 지워지고 위의 110·200 은 아직 남는다)', !gu.bullets.some((b) => b.x === 100) && !gu.bullets.some((b) => b.x === 30) && gu.bullets.some((b) => b.x === 110) && gu.bullets.some((b) => b.x === 200), `front=${gu.wave.y}`);
 check('해일이 지나는 동안 맞지 않는다', gu.player.invuln > 0);
 run(gu, 60);
-check('해일이 끝나면 사라지고, 기둥 안의 체력 1 적은 잡힌다', gu.wave === null && !gu.enemies.includes(be) && !gu.enemies.includes(butter) && !gu.bullets.some((b) => b.x === 110));
-check('문어(체력 2)는 피해 1 로 한 번에 안 죽는다', gu.enemies.includes(octo) && octo.hp === 1);
-check('기둥 바깥의 적과 탄은 무사하다', gu.enemies.includes(far) && gu.bullets.length === 2);
-check('해일로 잡은 점수는 들어온다', gu.score === 50 + 80, `score=${gu.score}`);
+check('해일이 끝나면 사라지고, 모든 탄이 지워진다', gu.wave === null && gu.bullets.length === 0);
+check('화면 안의 해파리·복어·문어(피해 2)가 폭 상관없이 모두 잡힌다', [be, butter, octo, far].every((e) => !gu.enemies.includes(e)));
+check('해일로 잡은 점수는 들어온다 (콤보 4 까지는 배율 1)', gu.score === 50 + 80 + 150 + 50, `score=${gu.score}`);
 check('해일로 잡아도 폭탄은 늘지 않는다', gu.bombs === 1);
 
-// 해일과 크라켄: 기둥 안에 있을 때만 피해 10
+// 해일과 크라켄: 화면 어디에 있든 피해 20
 const kw = (bossX) => {
   const g = new Game({ bonusPlan: {}, rng: seq(0.5) });
-  g.start(); g.stage = 5; g.startStage(); g.phase = 'play';
+  begin(g); g.stage = 5; g.startStage(); g.phase = 'play';
   g.boss.state = 'fight'; g.boss.y = 74; g.boss.x = bossX;
   g.player.x = 112; g.ult();
   g.boss.step = () => {};          // 보스를 가만히 두고 해일만 본다
   run(g, 60);
   return g.boss.hp;
 };
-check('해일은 기둥 안의 크라켄에게 피해 10', kw(112) === 50, `hp=${kw(112)}`);
-check('기둥에서 먼 크라켄은 해일을 맞지 않는다', kw(30) === 60 && kw(200) === 60);
+check('해일은 크라켄에게 피해 20 (옆으로 치우쳐 있어도 맞는다)', kw(112) === 40 && kw(30) === 40 && kw(200) === 40, `hp=${kw(112)}`);
 
 const gg = playing([formed('bee', 3, 4)]);
 gg.player.shots.push({ x: gg.enemies[0].x, y: gg.enemies[0].y + 4.5 });
@@ -131,7 +129,7 @@ gl.bullets.push({ x: gl.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(gl, 1 + 91);
 check('잠수함을 잃으면 폭탄은 기본 개수로 돌아간다', gl.lives === 2 && gl.bombs === START_BOMBS);
 
-const gbn = new Game({ bonusPlan: {} }); gbn.start(); gbn.stage = 3; gbn.bonusPlan = { 3: 'school' }; gbn.startStage(); gbn.phase = 'play';
+const gbn = new Game({ bonusPlan: {} }); begin(gbn); gbn.stage = 3; gbn.bonusPlan = { 3: 'school' }; gbn.startStage(); gbn.phase = 'play';
 check('보너스 스테이지에서는 필살기를 못 쓴다', !gbn.ultReady && gbn.ult() === false);
 
 const gcap = playing([]);
@@ -146,10 +144,10 @@ go.lives = 1; go.score = 1234; go.stage = 4; go.stats = { shots: 10, hits: 6, bo
 go.bullets.push({ x: go.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(go, 100);
 check('게임 오버가 되면 기록이 만들어진다', go.phase === 'over' && go.lastRecord && go.lastRecord.score === 1234 && go.lastRecord.stage === 4 && go.lastRecord.ratio === 60 && go.lastRecord.bosses === 1, JSON.stringify(go.lastRecord));
-check('점수판에 오를 점수면 이름을 받는 중이고, 그동안 새 게임은 시작되지 않는다', go.naming === true && (go.start(), go.phase === 'over'));
+check('점수판에 오를 점수면 이름을 받는 중이고, 그동안 새 게임은 시작되지 않는다', go.naming === true && (begin(go), go.phase === 'over'));
 go.submitName('A', '2026-01-01');
 for (let i = 0; i < 60; i++) go.tick();     // 결과 화면이 잠깐 지난 뒤에야 다시 시작한다
-go.start();
+begin(go);
 check('새 게임에서는 기록이 비워지고 내 기록 목록은 유지', go.lastRecord === null && go.rank === null && Array.isArray(go.records));
 
 // 단계가 바뀌어도 보스가 순간이동하지 않는다

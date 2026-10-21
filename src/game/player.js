@@ -1,8 +1,8 @@
 import { W } from './paths.js';
 import { WEAPON_DEF, WEAPON_TICKS } from './weapons.js';
+import { SHIPS, DEFAULT_SHIP, isShip } from './ships.js';
 
 export const PLAYER_Y = 262;
-const SPEED = 1.7;
 const SHOT_SPEED = 4.5;
 const RAPID_COOLDOWN = 4;
 /** 유도탄이 한 틱에 꺾을 수 있는 각도 (라디안) */
@@ -25,11 +25,12 @@ export class Player {
 
   /** keepTwin: 다음 스테이지로 넘어갈 때처럼 쌍둥이와 아이템 효과를 이어 간다 */
   reset(keepTwin = false) {
+    this.ship ??= DEFAULT_SHIP;                     // 기체는 판마다 고르는 것이라 잠수함을 잃어도 그대로다
     this.x = keepTwin ? this.x : W / 2;             // 다음 스테이지로 넘어갈 때는 있던 자리에서 이어 간다
     this.twin = keepTwin ? this.twin : false;
     this.rapid = keepTwin ? this.rapid : 0;         // 연사 강화 남은 틱
     this.shield = keepTwin ? this.shield : false;   // 방어막: 한 번 맞는 것을 막는다
-    this.weapon = keepTwin ? this.weapon : 'torpedo';   // 새 무기와 남은 틱: 잠수함을 잃으면 사라진다
+    this.weapon = keepTwin ? this.weapon : this.base;   // 새 무기와 남은 틱: 잠수함을 잃으면 사라지고 기체의 기본 공격으로 돌아온다
     this.weaponT = keepTwin ? this.weaponT : 0;
     this.boost = keepTwin ? this.boost : 0;         // 영구 강화(단계): 추진기·어뢰 가속·장전기. 잠수함을 잃으면 사라진다
     this.velo = keepTwin ? this.velo : 0;
@@ -43,7 +44,14 @@ export class Player {
     this.firing ??= false;
   }
 
-  get speed() { return SPEED + this.boost * BOOST_STEP; }
+  /** 기체를 바꾼다 (새 게임을 시작할 때). 아이템 무기가 없으면 기본 공격도 따라 바뀐다 */
+  setShip(id) {
+    this.ship = isShip(id) ? id : DEFAULT_SHIP;
+    if (this.weaponT <= 0) this.weapon = this.base;
+  }
+
+  get base() { return SHIPS[this.ship].base; }
+  get speed() { return SHIPS[this.ship].speed + this.boost * BOOST_STEP; }
   get shotSpeed() { return SHOT_SPEED + this.velo * VELO_STEP; }
 
   get maxX() { return W - 8 - (this.twin ? TWIN_GAP : 0); }
@@ -75,8 +83,11 @@ export class Player {
     if (this.shots.length + per > per * ((this.rapid > 0 ? 8 : 2) + this.reload)) return 0;   // 연사 중에는 줄줄이 이어 나간다
     for (let i = 0; i < ships; i++) {
       const x = this.x + i * TWIN_GAP;
+      if (def.plain) {                                  // 기본 공격: 곧장 위로 (기체마다 줄 수·관통이 다르다)
+        for (const ox of def.offsets ?? [0]) this.shots.push(this.plainShot(def, x + ox));
+        continue;
+      }
       for (const a of def.angles) {
-        if (this.weapon === 'torpedo') { this.shots.push({ x, y: PLAYER_Y - 8 }); continue; }
         const ang = -Math.PI / 2 + a, sp = def.speed + this.velo * VELO_STEP;
         this.shots.push({
           x, y: PLAYER_Y - 8, kind: this.weapon, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
@@ -86,6 +97,15 @@ export class Player {
       }
     }
     return ships;
+  }
+
+  /** 기본 공격 한 발. 어뢰는 {x, y} 만, 다른 기체의 공격은 종류·속도 배율·관통 정보가 더 붙는다 */
+  plainShot(def, x) {
+    const s = { x, y: PLAYER_Y - 8 };
+    if (!def.kind) return s;
+    Object.assign(s, { kind: def.kind, k: def.k ?? 1, w: def.w });
+    if (def.pierce) Object.assign(s, { pierce: true, maxHit: def.maxHit, hit: new Set() });
+    return s;
   }
 
   /** 유도탄: 앞쪽에서 가장 가까운 목표 쪽으로 조금씩 방향을 튼다 */
@@ -108,7 +128,7 @@ export class Player {
   /** 날아가는 어뢰를 한 틱 움직인다 (클리어·사망 연출 중에도 허공에 멈추지 않게 따로 부른다) */
   moveShots(targets = []) {
     for (const s of this.shots) {
-      if (s.vy === undefined) { s.y -= this.shotSpeed; continue; }
+      if (s.vy === undefined) { s.y -= this.shotSpeed * (s.k ?? 1); continue; }
       if (s.homing) this.steer(s, targets);
       s.x += s.vx;
       s.y += s.vy;
@@ -132,7 +152,7 @@ export class Player {
     this.x = Math.max(8, Math.min(this.maxX, this.x));
     if (this.invuln > 0 && --this.invuln === 0) this.quiet = false;
     if (this.rapid > 0) this.rapid--;
-    if (this.weaponT > 0 && --this.weaponT === 0) this.weapon = 'torpedo';
+    if (this.weaponT > 0 && --this.weaponT === 0) this.weapon = this.base;
     this.moveShots(targets);
     if (this.cooldown > 0) this.cooldown--;
     if (canFire && this.firing && this.cooldown <= 0) {

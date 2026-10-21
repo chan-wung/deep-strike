@@ -2,7 +2,7 @@ import { Game, TICRATE } from '../src/game/game.js';
 import { Enemy } from '../src/game/enemy.js';
 import { buildStage } from '../src/game/stage.js';
 import { PLAYER_Y } from '../src/game/player.js';
-import { check, done, seq } from './lib.mjs';
+import { begin, check, done, seq } from './lib.mjs';
 
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
 /** 대열 상태의 적 하나 */
@@ -12,7 +12,7 @@ const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 /** 지금 막 play 가 된 게임 */
 function playing(enemies, { rng = seq(0.5) } = {}) {
   const g = new Game({ bonusPlan: {}, rng });
-  g.start();
+  begin(g);
   g.enemies = [...enemies, anchor()];
   g.phase = 'play';
   g.playTime = 1000;
@@ -25,7 +25,7 @@ const aim = (g, e) => { const s = slotOf(g, e); g.player.shots.push({ x: s.x, y:
 // 흐름
 const g0 = new Game({ bonusPlan: {} });
 check('처음에는 타이틀', g0.phase === 'title');
-g0.start();
+begin(g0);
 check('아무 키나 누르면 ready', g0.phase === 'ready' && g0.lives === 3 && g0.stage === 1);
 run(g0, 2 * TICRATE);
 check('2초 뒤 play', g0.phase === 'play');
@@ -85,7 +85,7 @@ g6b.bullets.push({ x: g6b.player.x, y: PLAYER_Y, vx: 0, vy: 0 });
 run(g6b, 100);
 check('마지막 잠수함을 잃으면 게임 오버', g6b.phase === 'over');
 for (let i = 0; i < 60; i++) g6b.tick();
-g6b.start();
+begin(g6b);
 check('게임 오버에서 키를 누르면 새 게임', g6b.phase === 'ready' && g6b.lives === 3 && g6b.score === 0);
 
 const g7 = playing([formed('bee')]);
@@ -163,7 +163,7 @@ check('급강하 중에 잡으면 구출', gdh.rescue !== null);
 
 // 출격
 const gl = new Game({ bonusPlan: {} });
-gl.start();
+begin(gl);
 gl.rng = seq(0.5, 0, 0.1, 0.1);
 gl.enemies = buildStage(1);
 gl.enemies.forEach((e) => { e.state = 'formation'; });
@@ -171,7 +171,7 @@ gl.phase = 'play'; gl.playTime = 1000; gl.diveTimer = 1;
 run(gl, 1);
 check('대열이 다 모이면 출격한다: 문어는 소용돌이를 펼치러 간다', gl.enemies[0].state === 'beamMove');
 const gl2 = new Game({ bonusPlan: {} });
-gl2.start();
+begin(gl2);
 gl2.rng = seq(0.5, 0, 0.1, 0.1);
 gl2.lives = 1;
 gl2.enemies = buildStage(1);
@@ -197,7 +197,7 @@ gt.startStage();
 check('쌍둥이는 다음 스테이지에도 이어진다', gt.player.twin);
 
 // 보너스 스테이지
-const bonusGame = (kind, stage = 3) => { const g = new Game({ bonusPlan: {}, rng: seq(0.3, 0.7, 0.5) }); g.start(); g.stage = stage; g.bonusPlan = { [stage]: kind }; g.startStage(); return g; };
+const bonusGame = (kind, stage = 3) => { const g = new Game({ bonusPlan: {}, rng: seq(0.3, 0.7, 0.5) }); begin(g); g.stage = stage; g.bonusPlan = { [stage]: kind }; g.startStage(); return g; };
 const gb = bonusGame('school');
 check('계획된 스테이지는 보너스 (물고기 40마리)', gb.bonus && gb.enemies.length === 40);
 gb.phase = 'play';
@@ -311,6 +311,26 @@ check('70000점에 목숨 +1', gx.lives === 5);
 gx.addScore(70000);
 check('이후 70000점마다 +1', gx.lives === 6);
 check('최고 점수가 갱신된다', gx.hiScore === gx.score);
+
+// 콤보
+const gcombo = playing([]);
+const killBee = () => { const e = formed('bee'); e.hp = 1; gcombo.enemies.push(e); gcombo.hitEnemy(e); };
+for (let i = 0; i < 9; i++) killBee();
+check('콤보 9마리까지는 배율 1', gcombo.combo === 9 && gcombo.comboMult === 1 && gcombo.score === 450, `score=${gcombo.score}`);
+killBee();
+check('콤보 10마리째부터 x1.5 (10번째 격추에 바로 적용)', gcombo.comboMult === 1.5 && gcombo.score === 450 + 75, `score=${gcombo.score}`);
+check('콤보 10 에서 combo 이벤트', gcombo.events.includes('combo'));
+for (let i = 0; i < 40; i++) killBee();
+check('배율은 x3 까지', gcombo.comboMult === 3);
+run(gcombo, 90);
+check('1.5초 동안 못 잡으면 콤보가 끊긴다', gcombo.combo === 0 && gcombo.comboMult === 1);
+killBee(); gcombo.hitPlayer(); gcombo.player.invuln = 0; gcombo.hitPlayer(); gcombo.loseShip();
+check('잠수함을 잃으면 콤보가 끊긴다', gcombo.combo === 0);
+const gcb = new Game({ bonusPlan: { 2: 'school' } });
+begin(gcb); gcb.stage = 2; gcb.startStage(); gcb.phase = 'play';
+const cfish = new Enemy({ kind: 'fish', slotless: true, bonus: true }); cfish.hp = 1; gcb.enemies = [cfish];
+gcb.hitEnemy(cfish);
+check('보너스 스테이지에서는 콤보를 쓰지 않는다', gcb.combo === 0 && gcb.score === 100, `score=${gcb.score}`);
 
 // 재진입한 적도 다시 맞힐 수 있다
 const gz = playing([]);

@@ -2,7 +2,7 @@ import { Game } from '../src/game/game.js';
 import { Enemy } from '../src/game/enemy.js';
 import { Player, PLAYER_Y, TWIN_GAP } from '../src/game/player.js';
 import { WEAPONS, WEAPON_TICKS, itemPool, pickItem, pickWeapon } from '../src/game/weapons.js';
-import { check, done, seq } from './lib.mjs';
+import { begin, check, done, seq } from './lib.mjs';
 
 const run = (g, n) => { for (let i = 0; i < n; i++) g.tick(); };
 const kinds = (stage) => itemPool(stage).map(([k]) => k).join();
@@ -10,7 +10,7 @@ const formed = (x, y) => { const e = new Enemy({ kind: 'bee', row: 3, col: 4 });
 const anchor = () => new Enemy({ kind: 'bee', row: 4, col: 0, delay: 1e9 });
 function playing(enemies) {
   const g = new Game({ bonusPlan: {}, rng: seq(0.5) });
-  g.start();
+  begin(g);
   g.enemies = [...enemies, anchor()];
   g.phase = 'play';
   g.playTime = 1000;
@@ -98,11 +98,11 @@ gp.collectItems();
 check('무기 아이템을 먹으면 무기가 바뀐다', gp.player.weapon === 'laser' && gp.player.weaponT === 900 && gp.items.length === 0 && gp.popups.some((q) => q.key === 'item.laser'));
 
 // 적이 품은 아이템: 스테이지가 오르면 무기도 나온다
-const gc = new Game({ bonusPlan: {}, rng: seq(0.01, 0.99) }); gc.start(); gc.stage = 1; gc.startStage();
+const gc = new Game({ bonusPlan: {}, rng: seq(0.01, 0.99) }); begin(gc); gc.stage = 1; gc.startStage();
 check('1 스테이지(보통)에서 품은 적은 무기를 품지 않는다', gc.enemies.every((e) => !e.carries || !WEAPONS.includes(e.carries)));
 
 // 보스: 사나워질 때 무기를 떨어뜨린다
-const gb = new Game({ bonusPlan: {}, rng: seq(0.5) }); gb.start(); gb.stage = 5; gb.startStage(); gb.phase = 'play';
+const gb = new Game({ bonusPlan: {}, rng: seq(0.5) }); begin(gb); gb.stage = 5; gb.startStage(); gb.phase = 'play';
 gb.boss.state = 'fight'; gb.boss.y = 74;
 gb.damageBoss(gb.boss.maxHp - Math.floor(gb.boss.maxHp * 2 / 3) + 1);
 check('보스가 2단계가 되면 무기 하나를 떨어뜨린다', gb.boss.phase === 2 && gb.items.length === 1 && WEAPONS.includes(gb.items[0].type), JSON.stringify(gb.items));
